@@ -290,7 +290,7 @@ fi
 
 # ── Copia scripts e roda setup-db-host.sh na VPS ─────────────────────────────
 if [[ "${_skip_db_setup}" == "false" ]]; then
-    REMOTE_TMP="/tmp/vps-v2-db-$$"
+    REMOTE_TMP="/tmp/vps-db-$$"
     log_info "Copiando scripts para ${SSH_TARGET}:${REMOTE_TMP}"
 
     run_remote "mkdir -p ${REMOTE_TMP}"
@@ -322,7 +322,7 @@ if [[ "${SETUP_BACKUP}" == "true" ]]; then
     else
         log_info "Instalando backup DO Spaces na VPS de banco"
 
-        REMOTE_BACKUP_TMP="/tmp/vps-v2-backup-$$"
+        REMOTE_BACKUP_TMP="/tmp/vps-backup-$$"
         run_remote "mkdir -p ${REMOTE_BACKUP_TMP}"
         run_scp \
             "${SCRIPT_DIR}/backup-db.sh" \

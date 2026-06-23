@@ -13,5 +13,5 @@ bootstrap/cache
 *.log
 .DS_Store
 Thumbs.db
-vps-deployment-v2
+vps-deployment
 tests

@@ -1,4 +1,4 @@
-name: vps-v2-rollback
+name: vps-rollback
 
 on:
   workflow_dispatch:

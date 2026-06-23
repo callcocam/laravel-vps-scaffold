@@ -13,7 +13,7 @@ Ao rodar `./setup.sh`, o script usa `gh` (GitHub CLI) para criar:
 | Nome | Valor configurado | Workflow que usa |
 |------|------------------|------------------|
 | `DOMAIN` | domínio da app (ex: `app.example.com`) | compose de produção (router Traefik) |
-| `GHCR_REPO` | `callcocam/myapp` | `vps-v2-build-push` (push da imagem) |
+| `GHCR_REPO` | `callcocam/myapp` | `vps-build-push` (push da imagem) |
 
 ### Environment `production` — Secrets
 
@@ -59,17 +59,17 @@ gh variable set COMPOSE_FILE --repo "${REPO}" --env production --body "docker-co
 ## Mapa completo: qual workflow usa o quê
 
 ```
-vps-v2-build-push          (sem environment)
+vps-build-push          (sem environment)
   vars.GHCR_REPO            ← repository variable
 
-vps-v2-deploy-production   (environment: production)
+vps-deploy-production   (environment: production)
   secrets.APP_HOST
   secrets.APP_USER
   secrets.SSH_PRIVATE_KEY
   vars.DOMAIN              ← usado no compose de produção (router Traefik)
   → deploya em /opt/myapp/production/
 
-vps-v2-rollback            (environment: production)
+vps-rollback            (environment: production)
   secrets.APP_HOST
   secrets.APP_USER
   secrets.SSH_PRIVATE_KEY

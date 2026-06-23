@@ -87,7 +87,7 @@ if [[ "${DB_ENGINE}" == "mysql" ]]; then
     if [[ "${DRY_RUN}" != "true" ]]; then
         log_info "Configurando MySQL para escutar em todas as interfaces e aceitar até 300 conexões"
         MYSQL_BIND_ADDRESS="0.0.0.0"
-        cat > /etc/mysql/mysql.conf.d/zz-vps-v2.cnf <<CFG
+        cat > /etc/mysql/mysql.conf.d/zz-vps.cnf <<CFG
 [mysqld]
 bind-address = ${MYSQL_BIND_ADDRESS}
 max_connections = 300
@@ -116,8 +116,8 @@ FLUSH PRIVILEGES;
 SQL
         fi
 
-        log_info "Salvando credenciais em /root/.db-credentials-v2 (modo 600)"
-        write_file_secure "/root/.db-credentials-v2" "root:root" "600" "DB_ENGINE=mysql
+        log_info "Salvando credenciais em /root/.db-credentials (modo 600)"
+        write_file_secure "/root/.db-credentials" "root:root" "600" "DB_ENGINE=mysql
 MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 DB_NAME=${DB_NAME}
 DB_USER=${DB_USER}
@@ -131,7 +131,7 @@ elif [[ "${DB_ENGINE}" == "pgsql" ]]; then
         PG_VERSION=$(ls /etc/postgresql | sort -V | tail -n1)
         log_info "PostgreSQL ${PG_VERSION} instalado — configurando listen_addresses e conexões máximas"
         PG_LISTEN_ADDRESSES="'*'"
-        cat > "/etc/postgresql/${PG_VERSION}/main/conf.d/vps-v2.conf" <<CFG
+        cat > "/etc/postgresql/${PG_VERSION}/main/conf.d/vps.conf" <<CFG
 listen_addresses = ${PG_LISTEN_ADDRESSES}
 max_connections = 300
 CFG
@@ -174,8 +174,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${DB_USER};
 SQL
 
-        log_info "Salvando credenciais em /root/.db-credentials-v2 (modo 600)"
-        write_file_secure "/root/.db-credentials-v2" "root:root" "600" "DB_ENGINE=pgsql
+        log_info "Salvando credenciais em /root/.db-credentials (modo 600)"
+        write_file_secure "/root/.db-credentials" "root:root" "600" "DB_ENGINE=pgsql
 DB_NAME=${DB_NAME}
 DB_USER=${DB_USER}
 "
@@ -217,7 +217,7 @@ if [[ "${DRY_RUN}" != "true" ]]; then
     fi
 
     mkdir -p /etc/fail2ban/jail.d
-    cat > /etc/fail2ban/jail.d/vps-v2-ssh.local << CFG
+    cat > /etc/fail2ban/jail.d/vps-ssh.local << CFG
 [sshd]
 enabled  = true
 port     = ssh
@@ -235,4 +235,4 @@ CFG
 fi
 
 log_success "Banco de dados provisionado com sucesso!"
-log_info "Credenciais salvas em /root/.db-credentials-v2"
+log_info "Credenciais salvas em /root/.db-credentials"

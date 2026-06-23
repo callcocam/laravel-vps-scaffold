@@ -86,7 +86,7 @@ build_payload() {
         { "name": "Severity",   "value": "${severity^^}", "inline": true },
         { "name": "Timestamp",  "value": "${timestamp}", "inline": false }
       ],
-      "footer": { "text": "vps-deployment-v2 / test-webhooks.sh" }
+      "footer": { "text": "vps-deployment / test-webhooks.sh" }
     }
   ],
   "attachments": [
@@ -99,7 +99,7 @@ build_payload() {
         { "title": "Severity", "value": "${severity^^}", "short": true },
         { "title": "Time",     "value": "${timestamp}", "short": true }
       ],
-      "footer": "vps-deployment-v2"
+      "footer": "vps-deployment"
     }
   ]
 }
@@ -161,7 +161,7 @@ send_webhook() {
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 main() {
-    log_header "Webhook Test — vps-deployment-v2"
+    log_header "Webhook Test — vps-deployment"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_warn "Running in DRY-RUN mode — no requests will be sent."

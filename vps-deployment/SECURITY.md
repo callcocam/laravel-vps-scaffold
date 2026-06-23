@@ -1,4 +1,4 @@
-# Relatório de Segurança — VPS Deployment v2
+# Relatório de Segurança — VPS Deployment
 
 > Auditoria realizada em 2026-05-03. Documenta os achados, as correções aplicadas e os riscos residuais do ambiente de deploy.
 
@@ -25,14 +25,14 @@
 
 ### Crítico — `manifest.env` no git
 
-**Problema:** O `.gitignore` tinha um typo (`/vps-deployment-packagevps-deployment-v2/manifest.env` em vez de `/vps-deployment-v2/manifest.env`). O arquivo com senhas em texto puro era rastreado e commitado.
+**Problema:** O `.gitignore` tinha um typo (`/vps-deployment-packagevps-deployment/manifest.env` em vez de `/vps-deployment/manifest.env`). O arquivo com senhas em texto puro era rastreado e commitado.
 
 **Correção aplicada:**
 - Corrigido o path no `.gitignore`
 - Arquivo removido do índice git com `git rm --cached`
 - O arquivo local permanece (necessário para o wizard), mas nunca mais será commitado
 
-**Ação residual:** O histórico git anterior ainda contém as credenciais. Como o repositório é privado, o risco é controlado. Se o repo se tornar público, use `git filter-repo --path vps-deployment-v2/manifest.env --invert-paths` para limpar o histórico.
+**Ação residual:** O histórico git anterior ainda contém as credenciais. Como o repositório é privado, o risco é controlado. Se o repo se tornar público, use `git filter-repo --path vps-deployment/manifest.env --invert-paths` para limpar o histórico.
 
 ---
 
@@ -77,7 +77,7 @@ systemctl restart sshd
 
 **Problema:** Ambos os scripts instalavam o fail2ban com `apt install` mas sem nenhum jail configurado. O serviço pode iniciar com configuração padrão mínima ou nenhuma, dependendo da versão do Ubuntu.
 
-**Correção aplicada** (`setup-app-host.sh` e `setup-db-host.sh`): Ambos os scripts agora criam `/etc/fail2ban/jail.d/vps-v2-ssh.local`:
+**Correção aplicada** (`setup-app-host.sh` e `setup-db-host.sh`): Ambos os scripts agora criam `/etc/fail2ban/jail.d/vps-ssh.local`:
 
 ```ini
 [sshd]

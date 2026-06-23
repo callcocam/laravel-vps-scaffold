@@ -1,4 +1,4 @@
-name: vps-v2-build-push
+name: vps-build-push
 
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
             --file ./Dockerfile.prod \
             --tag "${TAG_SHA}" \
             --tag "${TAG_LATEST}" \
-            --cache-from type=gha,scope=vps-v2-build-push \
-            --cache-to type=gha,mode=max,scope=vps-v2-build-push \
+            --cache-from type=gha,scope=vps-build-push \
+            --cache-to type=gha,mode=max,scope=vps-build-push \
             --push \
             .

@@ -5,7 +5,7 @@
 # Rode a partir de qualquer lugar — ele resolve os caminhos automaticamente.
 #
 # Uso (de dentro de ~/projects/myapp):
-#   ./vps-deployment-v2/automation/run-install-compose.sh [--start]
+#   ./vps-deployment/automation/run-install-compose.sh [--start]
 #
 # --start: sobe Traefik e app imediatamente após instalar os Compose files
 
@@ -35,7 +35,7 @@ fi
 
 SSH_TARGET="${DEPLOY_USER}@${VPS_HOST}"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
-REMOTE_TMP="/tmp/vps-v2-compose-$$"
+REMOTE_TMP="/tmp/vps-compose-$$"
 
 echo "[INFO] VPS: ${SSH_TARGET}"
 echo "[INFO] START_SERVICES: ${START_SERVICES}"
@@ -74,4 +74,4 @@ echo ""
 echo "Próximos passos:"
 echo "  - Fazer o primeiro deploy via GitHub Actions, ou"
 echo "  - Re-rodar com --start para subir Traefik e app agora:"
-echo "    ./vps-deployment-v2/automation/run-install-compose.sh --start"
+echo "    ./vps-deployment/automation/run-install-compose.sh --start"

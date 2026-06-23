@@ -1,4 +1,4 @@
-# VPS Deployment v2
+# VPS Deployment
 
 Provisionamento e deploy do `myapp` no VPS, ambiente production. Banco com conexão única.
 
@@ -16,7 +16,7 @@ Provisionamento e deploy do `myapp` no VPS, ambiente production. Banco com conex
    - Criar registro `A` para a raiz (e `www` se quiser).
 2. Rodar setup:
 ```bash
-bash vps-deployment-v2/setup.sh
+bash vps-deployment/setup.sh
 ```
 3. Durante o setup:
 - informar `APP_SLUG` (ex.: `production`)
@@ -45,7 +45,7 @@ bash vps-deployment-v2/setup.sh
 |--------|---------------|----------------|
 | `main` | `production`  | `production-<sha>`, `branch-production-latest` |
 
-- `vps-v2-build-push` dispara em push para `main` e publica a imagem no GHCR.
+- `vps-build-push` dispara em push para `main` e publica a imagem no GHCR.
 
 ## Validação Pós-Provisionamento
 ### Local (máquina de operação)
@@ -69,8 +69,8 @@ ss -tulpen | grep -E ':80|:443'
 
 ## Deploy
 1. Commit/push em `main`.
-2. Confirmar `vps-v2-build-push` OK.
-3. Confirmar `vps-v2-deploy-production` OK.
+2. Confirmar `vps-build-push` OK.
+3. Confirmar `vps-deploy-production` OK.
 4. Verificar stack no VPS e logs se necessário.
 
 ## Migrações
@@ -173,14 +173,14 @@ PGADMIN_DEFAULT_PASSWORD=<senha-forte>
 ## Comandos Úteis
 ```bash
 # bootstrap de secrets/vars no GitHub
-automation/bootstrap-github.sh vps-deployment-v2/manifest.env
+automation/bootstrap-github.sh vps-deployment/manifest.env
 
 # instalar compose no host
 APP_SLUG=production START_SERVICES=true automation/install-compose-on-host.sh
 
 # instalar monitoring (com validação DNS)
-APP_SLUG=production automation/install-monitoring-on-host.sh vps-deployment-v2/manifest.production.env production
+APP_SLUG=production automation/install-monitoring-on-host.sh vps-deployment/manifest.production.env production
 
 # health check completo
-automation/vps-health-check.sh vps-deployment-v2/manifest.production.env production
+automation/vps-health-check.sh vps-deployment/manifest.production.env production
 ```

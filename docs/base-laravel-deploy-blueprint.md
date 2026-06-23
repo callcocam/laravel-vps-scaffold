@@ -4,7 +4,7 @@
 > reaproveitando a infra de container e deploy do `myapp`, **sem a regra de negócio** (fluxo de caixa)
 > e **sem multitenancy**. O objetivo é ter um esqueleto pronto pra clonar e começar qualquer app novo.
 >
-> Este blueprint foi extraído da análise do projeto `myapp` e do diretório `vps-deployment-v2`.
+> Este blueprint foi extraído da análise do projeto `myapp` e do diretório `vps-deployment`.
 > Tudo que aqui aparece como "conteúdo pronto" já está com as partes de tenant **removidas**.
 
 ---
@@ -14,7 +14,7 @@
 Entregar um repositório Laravel **pré-configurado para rodar** com:
 
 - **Local:** `docker compose up` → app + Postgres + Redis + worker de fila + Mailpit, roteado por Traefik em `*.localhost`.
-- **Produção:** imagem única (php-fpm + nginx + supervisor) publicada no GHCR e deployada numa VPS via `vps-deployment-v2` (Traefik + Let's Encrypt + GitHub Actions).
+- **Produção:** imagem única (php-fpm + nginx + supervisor) publicada no GHCR e deployada numa VPS via `vps-deployment` (Traefik + Let's Encrypt + GitHub Actions).
 - **Banco:** PostgreSQL (engine padrão; MySQL suportado como alternativa).
 - **Fila/cache/sessão:** Redis.
 - **Frontend:** **livre**. Use o esqueleto padrão do Laravel. A infra de container/deploy é agnóstica de stack — funciona com Blade puro, Livygwire, Inertia+Vue/React, ou API-only. Não acople o deploy a nenhuma escolha de frontend.
@@ -70,13 +70,13 @@ Mantenha o **padrão** de caminhos (`/opt/<project>/<app_slug>`) — só o nome 
 ├── .env.example
 ├── .github/workflows/
 │   ├── tests.yml
-│   ├── vps-v2-build-push.yml
-│   ├── vps-v2-deploy-production.yml
-│   └── vps-v2-rollback.yml
-└── vps-deployment-v2/            # toolkit de provisionamento + deploy (ver §7)
+│   ├── vps-build-push.yml
+│   ├── vps-deploy-production.yml
+│   └── vps-rollback.yml
+└── vps-deployment/            # toolkit de provisionamento + deploy (ver §7)
 ```
 
-> **Removido em relação ao myapp:** `.github/workflows/vps-v2-tenant-migrate.yml` e qualquer
+> **Removido em relação ao myapp:** `.github/workflows/vps-tenant-migrate.yml` e qualquer
 > migration/config de tenant.
 
 ---
@@ -338,9 +338,9 @@ MAIL_PORT=1025
 
 ---
 
-## 7. Deploy VPS — `vps-deployment-v2`
+## 7. Deploy VPS — `vps-deployment`
 
-Copie o diretório `vps-deployment-v2/` do myapp e aplique os cortes abaixo. A arquitetura permanece:
+Copie o diretório `vps-deployment/` do myapp e aplique os cortes abaixo. A arquitetura permanece:
 **setup.sh (wizard) → provisiona VPS (Docker, UFW, fail2ban, SSH hardening, Traefik) → grava `.env` e
 secrets do GitHub → push em `main` dispara build+deploy**.
 
@@ -356,7 +356,7 @@ secrets do GitHub → push em `main` dispara build+deploy**.
 
 | Arquivo | Ação |
 |---------|------|
-| `.github/workflows/vps-v2-tenant-migrate.yml` | **Deletar** |
+| `.github/workflows/vps-tenant-migrate.yml` | **Deletar** |
 | `manifest.*.env` / `templates/manifest.example.env` | Remover `DB_LANDLORD_*`, `DB_TENANT_DATABASE`, `DOMAIN_LANDLORD`. Renomear `DOMAIN_LANDLORD` → `DOMAIN`. |
 | `templates/.env.production.example` | Já é single-conn no myapp; só confirme que não tem `*_LANDLORD_*`. |
 | README/SECURITY/GITHUB-ENVIRONMENTS | Remover seções de Spatie/landlord/tenant e a linha do workflow `tenant-migrate`. |
@@ -417,19 +417,19 @@ e troque `DOMAIN_LANDLORD` por `DOMAIN`.
 **`tests.yml`** — manter (ajustar: se não houver build de assets, troque o passo de build por
 `php artisan test` ou `composer test`).
 
-**`vps-v2-build-push.yml`** — **remover** todo o uso de `DOMAIN_LANDLORD`/`WAYFINDER_LANDLORD_DOMAIN`
+**`vps-build-push.yml`** — **remover** todo o uso de `DOMAIN_LANDLORD`/`WAYFINDER_LANDLORD_DOMAIN`
 e o `--build-arg`. Fica um buildx simples:
 ```yaml
 docker buildx build \
   --file ./Dockerfile.prod \
   --tag "${IMAGE}:production-${SHORT_SHA}" \
   --tag "${IMAGE}:branch-production-latest" \
-  --cache-from type=gha,scope=vps-v2-build-push \
-  --cache-to type=gha,mode=max,scope=vps-v2-build-push \
+  --cache-from type=gha,scope=vps-build-push \
+  --cache-to type=gha,mode=max,scope=vps-build-push \
   --push .
 ```
 
-**`vps-v2-deploy-production.yml`** — manter a espinha (sync compose via scp, `docker compose pull/up`,
+**`vps-deploy-production.yml`** — manter a espinha (sync compose via scp, `docker compose pull/up`,
 prep de `storage`/`bootstrap/cache`, `optimize:clear`, `storage:link`, healthcheck interno em `127.0.0.1/up`).
 **Trocar a etapa de migração** por uma única conexão e **remover** o bloco `tenants:artisan`:
 ```bash
@@ -438,7 +438,7 @@ php artisan migrate --force
 ```
 E na validação do `.env`, checar apenas `DB_CONNECTION DB_DATABASE` (remover `DB_LANDLORD_*`).
 
-**`vps-v2-rollback.yml`** — manter; trocar o `migrate --database=landlord --path=...` por `php artisan migrate --force`.
+**`vps-rollback.yml`** — manter; trocar o `migrate --database=landlord --path=...` por `php artisan migrate --force`.
 
 ### 7.6 Wizard `setup.sh`
 
@@ -458,7 +458,7 @@ Manter o fluxo. Cortes:
 2. **Copiar a infra local:** `docker/`, `docker-compose.yml`, `.dockerignore` (com os ajustes de nome/slug deste doc).
 3. **Ajustar `.env.example`** conforme §6.
 4. **Criar `Dockerfile.prod`** conforme §5 (decidir se mantém o bloco de build de assets).
-5. **Copiar `vps-deployment-v2/`** e aplicar os cortes de §7 (deletar `tenant-migrate`, de-tenant do `.env`/manifest/workflows).
+5. **Copiar `vps-deployment/`** e aplicar os cortes de §7 (deletar `tenant-migrate`, de-tenant do `.env`/manifest/workflows).
 6. **Criar os 3 workflows** (`tests`, `build-push`, `deploy-production`) + `rollback`, já de-tenant.
 7. **Subir local e validar** (§9).
 8. **Escrever um `CLAUDE.md`/README curto** do projeto base explicando o stack e os comandos.
@@ -481,9 +481,9 @@ Manter o fluxo. Cortes:
 
 **Produção (1º deploy):**
 - [ ] DNS `A` da raiz aponta pra VPS.
-- [ ] `bash vps-deployment-v2/setup.sh` provisiona (Docker, UFW, fail2ban, Traefik, `.env`, secrets GH).
-- [ ] Push em `main` → `vps-v2-build-push` publica imagem no GHCR.
-- [ ] `vps-v2-deploy-production` faz pull/up, roda `migrate --force` e healthcheck `127.0.0.1/up` passa.
+- [ ] `bash vps-deployment/setup.sh` provisiona (Docker, UFW, fail2ban, Traefik, `.env`, secrets GH).
+- [ ] Push em `main` → `vps-build-push` publica imagem no GHCR.
+- [ ] `vps-deploy-production` faz pull/up, roda `migrate --force` e healthcheck `127.0.0.1/up` passa.
 - [ ] HTTPS válido (Let's Encrypt) no domínio.
 - [ ] `grep` de tenant/landlord/wayfinder retorna **vazio** no repo.
 
@@ -491,7 +491,7 @@ Manter o fluxo. Cortes:
 
 ## 10. Referência — incidentes do myapp que a base já deve prevenir
 
-Estes vieram da operação real (`vps-deployment-v2/README.md`). Mantenha as prevenções:
+Estes vieram da operação real (`vps-deployment/README.md`). Mantenha as prevenções:
 
 - **Redis connection não configurada:** `SESSION_CONNECTION=default` + `REDIS_CACHE_CONNECTION=cache`.
 - **Cache path inválido:** o deploy cria `storage/framework/{views,cache,sessions}` e `bootstrap/cache` antes do `optimize`.

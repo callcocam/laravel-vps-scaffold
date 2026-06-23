@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # setup.sh — Wizard interativo (multi-app por APP_SLUG)
-# Execute: bash vps-deployment-v2/setup.sh
+# Execute: bash vps-deployment/setup.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REMOTE_WORKDIR="/tmp/vps-deployment-v2"
+REMOTE_WORKDIR="/tmp/vps-deployment"
 
 # Carrega manifest genérico para pre-preencher valores compartilhados (VPS, GitHub, etc.)
 if [[ -f "${SCRIPT_DIR}/manifest.env" ]]; then
@@ -125,7 +125,7 @@ suggest_password() {
 emit_manifest_var() { printf '%s=%q\n' "$1" "${2:-}"; }
 
 clear
-step "VPS Deployment v2 — myapp (production)"
+step "VPS Deployment — myapp (production)"
 info "Ambiente: production (main → deploy manual)"
 echo ""
 DEPLOY_ENV=production
@@ -516,7 +516,7 @@ if ask_yn "Configurar backup automático no DO Spaces para ${DEPLOY_ENV}?"; then
             DB_KEY_PATH="${HOME}/.ssh/id_ed25519_${GITHUB_REPO}_db"
             [[ -f "${DB_KEY_PATH}" ]] && _BACKUP_SSH="ssh -o StrictHostKeyChecking=accept-new -i ${DB_KEY_PATH} -o ServerAliveInterval=30" && _BACKUP_SCP="scp -o StrictHostKeyChecking=accept-new -i ${DB_KEY_PATH}"
         fi
-        REMOTE_BACKUP_TMP="/tmp/vps-v2-backup-$$"
+        REMOTE_BACKUP_TMP="/tmp/vps-backup-$$"
         ${_BACKUP_SSH} "${_backup_target_user}@${_backup_target_host}" "mkdir -p ${REMOTE_BACKUP_TMP}"
         ${_BACKUP_SCP} \
             "${SCRIPT_DIR}/automation/backup-db.sh" \

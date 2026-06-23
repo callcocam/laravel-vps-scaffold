@@ -15,7 +15,7 @@ um app Laravel limpo e começa a desenvolver.
 | `Dockerfile.prod` | Imagem única de produção (php-fpm + nginx + supervisor) |
 | `.env.example` | Variáveis alinhadas com o stack (Postgres + Redis) |
 | `.github/workflows/` | CI (`tests`) + deploy (`build-push`, `deploy-production`, `rollback`) |
-| `vps-deployment-v2/` | Wizard de provisionamento + automações (Traefik, Let's Encrypt, backup, health-check) |
+| `vps-deployment/` | Wizard de provisionamento + automações (Traefik, Let's Encrypt, backup, health-check) |
 | `init.sh` | Renomeia o projeto (token `myapp` → seu slug) |
 | `docs/base-laravel-deploy-blueprint.md` | Documento que explica todas as decisões e a origem (siscom) |
 
@@ -30,7 +30,7 @@ cd meu-app
 
 # 2. Traga os arquivos do scaffold para dentro do app
 #    (copie docker/, docker-compose.yml, Dockerfile.prod, .dockerignore,
-#     .github/, vps-deployment-v2/, init.sh — mescle .env.example e .gitignore)
+#     .github/, vps-deployment/, init.sh — mescle .env.example e .gitignore)
 
 # 3. Renomeie o projeto
 ./init.sh meu-app
@@ -47,12 +47,12 @@ docker compose exec php php artisan migrate
 ## Deploy em VPS
 
 ```bash
-bash vps-deployment-v2/setup.sh
+bash vps-deployment/setup.sh
 ```
 
 O wizard provisiona a VPS (Docker, UFW, fail2ban, SSH hardening, Traefik + Let's Encrypt), gera o `.env`
 de produção e configura os secrets do GitHub. Daí, **push em `main`** dispara build da imagem (GHCR) e
-deploy automático. Veja `vps-deployment-v2/README.md` para detalhes e troubleshooting.
+deploy automático. Veja `vps-deployment/README.md` para detalhes e troubleshooting.
 
 ## Decisões / sem-tenant
 

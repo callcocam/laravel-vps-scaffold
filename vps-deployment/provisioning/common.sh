@@ -90,7 +90,7 @@ load_manifest() {
 
 # Encontra o manifest de production em <dir>.
 # Usa manifest.production.env (ou manifest.${DEPLOY_ENV}.env se definido)
-# Uso: MANIFEST_PATH="$(find_manifest /path/to/vps-deployment-v2)" || exit 1
+# Uso: MANIFEST_PATH="$(find_manifest /path/to/vps-deployment)" || exit 1
 find_manifest() {
     local dir="${1:-$(pwd)}"
     local env="${DEPLOY_ENV:-production}"

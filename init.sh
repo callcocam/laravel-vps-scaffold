@@ -51,7 +51,7 @@ if [[ -n "${DOMAIN}" ]]; then
     if [[ -f .env.example ]]; then
         sed -i "s#APP_URL=http://${SLUG}.localhost#APP_URL=http://${SLUG}.localhost  # prod: https://${DOMAIN}#" .env.example || true
     fi
-    echo "✔ Domínio de produção sugerido: ${DOMAIN} (configure no wizard: vps-deployment-v2/setup.sh)"
+    echo "✔ Domínio de produção sugerido: ${DOMAIN} (configure no wizard: vps-deployment/setup.sh)"
 fi
 
 cat <<EOF
@@ -66,7 +66,7 @@ Pronto. Próximos passos:
        docker compose exec php php artisan key:generate
        docker compose exec php php artisan migrate
      App: http://${SLUG}.localhost   |  Mailpit: http://localhost:8027
-  3. Produção: bash vps-deployment-v2/setup.sh
+  3. Produção: bash vps-deployment/setup.sh
 
 Remova/realize o init: este script não se auto-deleta. Apague-o se quiser.
 EOF

@@ -127,10 +127,10 @@ if [[ "${DEPLOY_USER}" == "root" ]]; then
     log_info "Endurecendo o SSH — desativa login por senha, mantém acesso por chave (PermitRootLogin prohibit-password)"
     if [[ "${DRY_RUN}" != "true" ]]; then
         SSHD_CFG="/etc/ssh/sshd_config"
-        SSHD_BACKUP="/etc/ssh/sshd_config.bak-vps-v2"
+        SSHD_BACKUP="/etc/ssh/sshd_config.bak-vps"
         cp "${SSHD_CFG}" "${SSHD_BACKUP}"
         grep -Ev '^#?\s*(PermitRootLogin|PasswordAuthentication|MaxAuthTries)\b' "${SSHD_BACKUP}" > "${SSHD_CFG}"
-        printf '\n# Added by vps-deployment-v2 setup\nPermitRootLogin prohibit-password\nPasswordAuthentication no\nMaxAuthTries 3\n' >> "${SSHD_CFG}"
+        printf '\n# Added by vps-deployment setup\nPermitRootLogin prohibit-password\nPasswordAuthentication no\nMaxAuthTries 3\n' >> "${SSHD_CFG}"
         if ! sshd -t -f "${SSHD_CFG}"; then
             log_error "sshd_config inválido — restaurando backup pra não perder o acesso"
             cp "${SSHD_BACKUP}" "${SSHD_CFG}"
@@ -169,18 +169,18 @@ else
 
     log_info "Dando sudo sem senha para '${DEPLOY_USER}' — necessário pra rodar Docker e reiniciar serviços"
     if [[ "${DRY_RUN}" != "true" ]]; then
-        printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEPLOY_USER}" > /etc/sudoers.d/vps-v2-deploy
-        chmod 440 /etc/sudoers.d/vps-v2-deploy
-        visudo -cf /etc/sudoers.d/vps-v2-deploy || { rm -f /etc/sudoers.d/vps-v2-deploy; log_error "sudoers inválido — revertido"; exit 1; }
+        printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEPLOY_USER}" > /etc/sudoers.d/vps-deploy
+        chmod 440 /etc/sudoers.d/vps-deploy
+        visudo -cf /etc/sudoers.d/vps-deploy || { rm -f /etc/sudoers.d/vps-deploy; log_error "sudoers inválido — revertido"; exit 1; }
     fi
 
     log_info "Endurecendo o SSH — desabilita root login e autenticação por senha"
     if [[ "${DRY_RUN}" != "true" ]]; then
         SSHD_CFG="/etc/ssh/sshd_config"
-        SSHD_BACKUP="/etc/ssh/sshd_config.bak-vps-v2"
+        SSHD_BACKUP="/etc/ssh/sshd_config.bak-vps"
         cp "${SSHD_CFG}" "${SSHD_BACKUP}"
         grep -Ev '^#?\s*(PermitRootLogin|PasswordAuthentication|MaxAuthTries)\b' "${SSHD_BACKUP}" > "${SSHD_CFG}"
-        printf '\n# Added by vps-deployment-v2 setup\nPermitRootLogin no\nPasswordAuthentication no\nMaxAuthTries 3\n' >> "${SSHD_CFG}"
+        printf '\n# Added by vps-deployment setup\nPermitRootLogin no\nPasswordAuthentication no\nMaxAuthTries 3\n' >> "${SSHD_CFG}"
         if ! sshd -t -f "${SSHD_CFG}"; then
             log_error "sshd_config inválido — restaurando backup pra não perder o acesso"
             cp "${SSHD_BACKUP}" "${SSHD_CFG}"
@@ -208,7 +208,7 @@ if [[ "${DRY_RUN}" != "true" ]]; then
     fi
 
     mkdir -p /etc/fail2ban/jail.d
-    cat > /etc/fail2ban/jail.d/vps-v2-ssh.local << CFG
+    cat > /etc/fail2ban/jail.d/vps-ssh.local << CFG
 [sshd]
 enabled  = true
 port     = ssh

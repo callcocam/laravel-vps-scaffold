@@ -1,8 +1,8 @@
-name: vps-v2-deploy-production
+name: vps-deploy-production
 
 on:
   workflow_run:
-    workflows: ["vps-v2-build-push"]
+    workflows: ["vps-build-push"]
     types: [completed]
     branches:
       - main
@@ -82,7 +82,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           timeout: 2m
           command_timeout: 15m
-          source: "vps-deployment-v2/deployments/docker-compose.production.yml"
+          source: "vps-deployment/deployments/docker-compose.production.yml"
           target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
           strip_components: 2
 
@@ -95,7 +95,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           timeout: 2m
           command_timeout: 15m
-          source: "vps-deployment-v2/deployments/docker-compose.production.yml"
+          source: "vps-deployment/deployments/docker-compose.production.yml"
           target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
           strip_components: 2
 
@@ -109,7 +109,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -euo pipefail
-            echo "WORKFLOW_VERSION=vps-v2-deploy-production-2026-05-03"
+            echo "WORKFLOW_VERSION=vps-deploy-production-2026-05-03"
 
             APP_SLUG="${{ steps.context.outputs.app_slug }}"
             APP_DIR="/opt/myapp/${APP_SLUG}"

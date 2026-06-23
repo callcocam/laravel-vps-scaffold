@@ -60,7 +60,7 @@ send_backup_fail_alert() {
     fi
 
     local payload
-    payload=$(printf '{"text":"[myapp-v2][backup-fail][%s] %s"}' "${TARGET_ENV}" "${message}")
+    payload=$(printf '{"text":"[myapp][backup-fail][%s] %s"}' "${TARGET_ENV}" "${message}")
 
     curl -fsS -X POST -H 'Content-Type: application/json' -d "${payload}" "${BACKUP_ALERT_WEBHOOK_URL}" >/dev/null || true
 }
