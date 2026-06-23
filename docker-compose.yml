@@ -1,0 +1,150 @@
+name: myapp
+
+services:
+
+  nginx:
+    image: nginx:alpine
+
+    depends_on:
+      - php
+
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.myapp-web.rule=Host(`myapp.localhost`)"
+      - "traefik.http.routers.myapp-web.priority=1"
+      - "traefik.http.services.myapp-web.loadbalancer.server.port=80"
+
+    networks:
+      - internal
+      - web
+
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+
+    user: "1000:1000"
+
+    volumes:
+      - ./:/var/www
+
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+
+    working_dir: /var/www
+
+    networks:
+      - internal
+
+  # Worker da fila (redis): processa jobs em background. Reaproveita a imagem do php.
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+
+    user: "1000:1000"
+
+    command: php artisan queue:work redis --tries=3 --max-time=3600
+
+    restart: unless-stopped
+
+    volumes:
+      - ./:/var/www
+
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+
+    working_dir: /var/www
+
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:17
+
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: myapp
+      POSTGRES_PASSWORD: myapp
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    ports:
+      - "5434:5432"
+
+    networks:
+      - internal
+
+  pgadmin:
+    image: dpage/pgadmin4:9.14
+
+    depends_on:
+      - postgres
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: '${PGADMIN_DEFAULT_EMAIL:-admin@myapp.com}'
+      PGADMIN_DEFAULT_PASSWORD: '${PGADMIN_DEFAULT_PASSWORD:-password}'
+
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+    ports:
+      - "5052:80"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.myapp-pgadmin.rule=Host(`pgadmin.myapp.localhost`)"
+      - "traefik.http.routers.myapp-pgadmin.priority=100"
+      - "traefik.http.services.myapp-pgadmin.loadbalancer.server.port=80"
+
+    networks:
+      - internal
+      - web
+
+  redis:
+    image: redis:7-alpine
+
+    command: redis-server --appendonly yes
+
+    volumes:
+      - redis_data:/data
+
+    ports:
+      - "6381:6379"
+
+    networks:
+      - internal
+
+  mailpit:
+    image: axllent/mailpit
+
+    ports:
+      - "1027:1025"
+      - "8027:8025"
+
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  redis_data:
+
+networks:
+  internal:
+  web:
+    external: true
+    name: web

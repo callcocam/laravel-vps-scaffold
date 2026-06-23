@@ -1,0 +1,53 @@
+name: vps-v2-build-push
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ vars.GHCR_REPO || github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        run: docker buildx create --name builder --use --bootstrap
+
+      - name: Login GHCR
+        run: echo "${{ secrets.GHCR_PAT }}" | docker login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: Resolve context
+        id: context
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          {
+            echo "tag_channel_sha=production-${SHORT_SHA}"
+            echo "tag_channel_latest=branch-production-latest"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAG_SHA="${IMAGE}:${{ steps.context.outputs.tag_channel_sha }}"
+          TAG_LATEST="${IMAGE}:${{ steps.context.outputs.tag_channel_latest }}"
+
+          docker buildx build \
+            --file ./Dockerfile.prod \
+            --tag "${TAG_SHA}" \
+            --tag "${TAG_LATEST}" \
+            --cache-from type=gha,scope=vps-v2-build-push \
+            --cache-to type=gha,mode=max,scope=vps-v2-build-push \
+            --push \
+            .

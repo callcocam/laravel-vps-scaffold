@@ -1,0 +1,169 @@
+name: vps-v2-rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Previous image tag (example sha-abcdef1)
+        required: true
+      branch_name:
+        description: Branch name for rollback context (optional; defaults to selected ref)
+        required: false
+        default: ""
+      app_slug:
+        description: App slug/path (example staging, production, client-a)
+        required: false
+        default: ""
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: rollback-${{ github.event.inputs.app_slug || github.event.inputs.branch_name || github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve rollback context
+        id: context
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="${{ github.event.inputs.branch_name }}"
+          if [[ -z "${BRANCH_NAME}" || "${BRANCH_NAME}" == "null" ]]; then
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+
+          BRANCH_SLUG="$(echo "${BRANCH_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/^-+//; s/-+$//; s/-+/-/g' | cut -c1-63)"
+          if [[ -z "${BRANCH_SLUG}" ]]; then
+            echo "Unable to derive BRANCH_SLUG from branch '${BRANCH_NAME}'"
+            exit 1
+          fi
+
+          APP_SLUG="${{ github.event.inputs.app_slug }}"
+          if [[ -z "${APP_SLUG}" || "${APP_SLUG}" == "null" ]]; then
+            APP_SLUG="${BRANCH_SLUG}"
+          fi
+          if [[ ! "${APP_SLUG}" =~ ^[a-z0-9-]{1,63}$ ]]; then
+            echo "Invalid APP_SLUG '${APP_SLUG}'. Use [a-z0-9-], max 63 chars."
+            exit 1
+          fi
+
+          IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+
+          {
+            echo "branch_name=${BRANCH_NAME}"
+            echo "branch_slug=${BRANCH_SLUG}"
+            echo "app_slug=${APP_SLUG}"
+            echo "image_tag=${IMAGE_TAG}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Rollback deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+
+            BRANCH_NAME="${{ steps.context.outputs.branch_name }}"
+            BRANCH_SLUG="${{ steps.context.outputs.branch_slug }}"
+            APP_SLUG="${{ steps.context.outputs.app_slug }}"
+
+            APP_DIR="/opt/myapp/${APP_SLUG}"
+            if [[ ! -d "${APP_DIR}" ]]; then
+              echo "Missing APP_DIR '${APP_DIR}'."
+              exit 1
+            fi
+
+            IMAGE_TAG="${{ steps.context.outputs.image_tag }}"
+            if [[ "${IMAGE_TAG}" != "${APP_SLUG}-"* && "${IMAGE_TAG}" != "branch-${APP_SLUG}-latest" ]]; then
+              echo "Invalid image_tag '${IMAGE_TAG}' for app_slug '${APP_SLUG}'."
+              echo "Expected '${APP_SLUG}-<shortsha>' or 'branch-${APP_SLUG}-latest'."
+              exit 1
+            fi
+
+            echo "Rollback context:"
+            echo "  branch_name=${BRANCH_NAME}"
+            echo "  branch_slug=${BRANCH_SLUG}"
+            echo "  app_slug=${APP_SLUG}"
+            echo "  image_tag=${IMAGE_TAG}"
+
+            cd "${APP_DIR}"
+            export IMAGE_TAG
+            if grep -q '^IMAGE_TAG=' .env; then
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+            else
+              printf '\nIMAGE_TAG=%s\n' "${IMAGE_TAG}" >> .env
+            fi
+            docker compose -p "myapp-${APP_SLUG}" pull
+            docker compose -p "myapp-${APP_SLUG}" up -d --force-recreate
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions bootstrap/cache
+              chmod -R ug+rwX storage bootstrap/cache
+              chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              set -e
+              php artisan migrate --force
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              php artisan config:clear
+              php artisan cache:clear
+              php artisan event:clear
+              php artisan route:clear
+            '
+            docker compose -p "myapp-${APP_SLUG}" ps
+
+      - name: Health check (inside app container)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            APP_SLUG="${{ steps.context.outputs.app_slug }}"
+            APP_DIR="/opt/myapp/${APP_SLUG}"
+            if [[ ! -d "${APP_DIR}" ]]; then
+              echo "Missing APP_DIR '${APP_DIR}'."
+              exit 1
+            fi
+            cd "${APP_DIR}"
+            health_ok=0
+            for outer_attempt in 1 2 3 4 5; do
+              if docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+                for attempt in 1 2 3 4 5; do
+                  if curl -fsS http://127.0.0.1/up >/dev/null; then
+                    echo "Health check passed on /up (attempt ${attempt})"
+                    exit 0
+                  fi
+                  echo "Health check /up failed (attempt ${attempt}), retrying..."
+                  sleep 3
+                done
+
+                if curl -fsSI http://127.0.0.1/ >/dev/null; then
+                  echo "Warning: /up failed but / responded successfully"
+                  exit 0
+                fi
+
+                echo "Health check failed for both /up and /"
+                echo "---- /up response body ----"
+                curl -sS http://127.0.0.1/up || true
+                exit 1
+              '; then
+                health_ok=1
+                break
+              fi
+
+              echo "Health check command failed at container level (attempt ${outer_attempt}), retrying..."
+              docker compose -p "myapp-${APP_SLUG}" ps || true
+              sleep 4
+            done
+
+            if [[ "${health_ok}" -ne 1 ]]; then
+              echo "Health check failed after retries"
+              docker compose -p "myapp-${APP_SLUG}" logs app --tail=120 || true
+              exit 1
+            fi
+            echo "Health check finished inside app container for ${APP_SLUG}"

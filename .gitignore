@@ -1,0 +1,18 @@
+# Segredos de deploy — NUNCA commitar
+vps-deployment-v2/manifest.env
+vps-deployment-v2/manifest.*.env
+!vps-deployment-v2/templates/manifest.example.env
+
+# Laravel (quando o scaffold for aplicado sobre um app)
+/vendor
+/node_modules
+/.env
+/.env.*
+!/.env.example
+/storage/*.key
+/public/build
+/public/hot
+
+# SO / editor
+.DS_Store
+Thumbs.db

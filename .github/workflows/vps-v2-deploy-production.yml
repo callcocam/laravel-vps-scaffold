@@ -1,0 +1,273 @@
+name: vps-v2-deploy-production
+
+on:
+  workflow_run:
+    workflows: ["vps-v2-build-push"]
+    types: [completed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (exemplo: production-a1b2c3d). Deixe vazio para derivar do último build do main."
+        required: false
+        default: ""
+      app_slug:
+        description: "App slug/path (exemplo: production). Deixe vazio para usar 'production'."
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve deploy context
+        id: context
+        run: |
+          set -euo pipefail
+
+          HEAD_SHA="${{ github.sha }}"
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
+
+          IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+          if [[ -z "${IMAGE_TAG}" || "${IMAGE_TAG}" == "null" ]]; then
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              IMAGE_TAG="branch-production-latest"
+            else
+              IMAGE_TAG="production-${HEAD_SHA:0:7}"
+            fi
+          fi
+
+          APP_SLUG="${{ github.event.inputs.app_slug }}"
+          if [[ -z "${APP_SLUG}" || "${APP_SLUG}" == "null" ]]; then
+            APP_SLUG="production"
+          fi
+          if [[ ! "${APP_SLUG}" =~ ^[a-z0-9-]{1,63}$ ]]; then
+            echo "Invalid APP_SLUG '${APP_SLUG}'. Use [a-z0-9-], max 63 chars."
+            exit 1
+          fi
+
+          if [[ ! "${IMAGE_TAG}" =~ ^production- ]]; then
+            echo "WARNING: image_tag '${IMAGE_TAG}' does not start with 'production-'."
+          fi
+
+          {
+            echo "app_slug=${APP_SLUG}"
+            echo "image_tag=${IMAGE_TAG}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Sync docker-compose to VPS (attempt 1)
+        id: sync_compose
+        continue-on-error: true
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 2m
+          command_timeout: 15m
+          source: "vps-deployment-v2/deployments/docker-compose.production.yml"
+          target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
+          strip_components: 2
+
+      - name: Sync docker-compose to VPS (retry)
+        if: steps.sync_compose.outcome == 'failure'
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 2m
+          command_timeout: 15m
+          source: "vps-deployment-v2/deployments/docker-compose.production.yml"
+          target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
+          strip_components: 2
+
+      - name: Deploy app
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 2m
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            echo "WORKFLOW_VERSION=vps-v2-deploy-production-2026-05-03"
+
+            APP_SLUG="${{ steps.context.outputs.app_slug }}"
+            APP_DIR="/opt/myapp/${APP_SLUG}"
+
+            if [[ ! -d "${APP_DIR}" ]]; then
+              echo "Missing APP_DIR '${APP_DIR}'. Provision this environment first."
+              exit 1
+            fi
+
+            cd "${APP_DIR}"
+            mv -f docker-compose.production.yml docker-compose.yml
+
+            IMAGE_TAG="${{ steps.context.outputs.image_tag }}"
+            GHCR_REPO="${{ vars.GHCR_REPO || github.repository }}"
+
+            echo "Deploy context:"
+            echo "  app_slug=${APP_SLUG}"
+            echo "  image_tag=${IMAGE_TAG}"
+            echo "  ghcr_repo=${GHCR_REPO}"
+
+            export IMAGE_TAG GHCR_REPO
+            if grep -q '^IMAGE_TAG=' .env; then
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+            else
+              printf '\nIMAGE_TAG=%s\n' "${IMAGE_TAG}" >> .env
+            fi
+            if grep -q '^GHCR_REPO=' .env; then
+              sed -i "s#^GHCR_REPO=.*#GHCR_REPO=${GHCR_REPO}#" .env
+            else
+              printf 'GHCR_REPO=%s\n' "${GHCR_REPO}" >> .env
+            fi
+            docker compose -p "myapp-${APP_SLUG}" pull
+            docker compose -p "myapp-${APP_SLUG}" up -d --force-recreate --remove-orphans
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions bootstrap/cache
+              chmod -R ug+rwX storage bootstrap/cache
+              chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              set -e
+              php artisan optimize:clear
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              set -e
+              php artisan storage:link --force
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              set -e
+              php -r "if (! function_exists(\"imagewebp\")) { fwrite(STDERR, \"GD sem suporte a WebP (imagewebp ausente).\\n\"); exit(1);} echo \"GD WebP OK\\n\";"
+            '
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              set -e
+              if [ ! -f .env ]; then
+                echo "Missing .env in ${PWD}. Expected deploy env file."
+                exit 1
+              fi
+
+              missing=0
+              for key in DB_CONNECTION DB_DATABASE; do
+                if ! grep -q "^${key}=" .env; then
+                  echo "Missing ${key} in .env"
+                  missing=1
+                fi
+              done
+
+              if [ "${missing}" -ne 0 ]; then
+                echo "Invalid .env for deployment. Expected DB settings."
+                exit 1
+              fi
+
+              echo "Deployment DB settings:"
+              grep -E "^(DB_CONNECTION|DB_DATABASE)=" .env
+            '
+            migration_ok=0
+            for attempt in 1 2 3 4 5; do
+              if docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+                set -e
+                php artisan migrate --force
+              '; then
+                migration_ok=1
+                echo "Migration succeeded on attempt ${attempt}"
+                break
+              fi
+              echo "Migration failed on attempt ${attempt}; waiting before retry..."
+              sleep 5
+            done
+
+            if [[ "${migration_ok}" -ne 1 ]]; then
+              echo "Migration failed in ${APP_SLUG} after retries"
+              docker compose -p "myapp-${APP_SLUG}" logs app --tail=120 || true
+              exit 1
+            fi
+
+            docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+              php artisan config:clear
+              php artisan cache:clear
+              php artisan event:clear
+              php artisan route:clear
+            '
+
+            echo "IMAGE_TAG=${IMAGE_TAG}" > .last-deployed-tag
+            echo "DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .last-deployed-tag
+            echo "APP_SLUG=${APP_SLUG}" >> .last-deployed-tag
+
+            docker compose -p "myapp-${APP_SLUG}" ps
+
+      - name: Health check (inside app container)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.APP_HOST }}
+          username: ${{ secrets.APP_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 2m
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            APP_SLUG="${{ steps.context.outputs.app_slug }}"
+            APP_DIR="/opt/myapp/${APP_SLUG}"
+            if [[ ! -d "${APP_DIR}" ]]; then
+              echo "Missing APP_DIR '${APP_DIR}'."
+              exit 1
+            fi
+            cd "${APP_DIR}"
+            health_ok=0
+            for outer_attempt in 1 2 3 4 5; do
+              if docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
+                for attempt in 1 2 3 4 5; do
+                  if curl -fsS http://127.0.0.1/up >/dev/null; then
+                    echo "Health check passed on /up (attempt ${attempt})"
+                    exit 0
+                  fi
+                  echo "Health check /up failed (attempt ${attempt}), retrying..."
+                  sleep 3
+                done
+
+                if curl -fsSI http://127.0.0.1/ >/dev/null; then
+                  echo "Warning: /up failed but / responded successfully"
+                  exit 0
+                fi
+
+                echo "Health check failed for both /up and /"
+                echo "---- /up response body ----"
+                curl -sS http://127.0.0.1/up || true
+                exit 1
+              '; then
+                health_ok=1
+                break
+              fi
+
+              echo "Health check command failed at container level (attempt ${outer_attempt}), retrying..."
+              docker compose -p "myapp-${APP_SLUG}" ps || true
+              sleep 4
+            done
+
+            if [[ "${health_ok}" -ne 1 ]]; then
+              echo "Health check failed after retries"
+              docker compose -p "myapp-${APP_SLUG}" logs app --tail=120 || true
+              exit 1
+            fi
+            echo "Health check finished inside app container for ${APP_SLUG}"
+            cat .last-deployed-tag || true

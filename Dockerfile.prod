@@ -1,0 +1,85 @@
+FROM php:8.4-fpm
+
+RUN apt-get update && apt-get install -y \
+    nginx \
+    supervisor \
+    libpq-dev \
+    zip \
+    unzip \
+    git \
+    curl \
+    libzip-dev \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libjpeg62-turbo-dev \
+    libwebp-dev \
+    libfreetype6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install \
+    pdo \
+    pdo_pgsql \
+    pgsql \
+    pdo_mysql \
+    mbstring \
+    zip \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    opcache
+
+RUN pecl install redis && docker-php-ext-enable redis
+
+RUN { \
+    echo "memory_limit = 512M"; \
+    } > /usr/local/etc/php/conf.d/memory-limit.ini
+
+RUN { \
+    echo "opcache.enable=1"; \
+    echo "opcache.memory_consumption=256"; \
+    echo "opcache.max_accelerated_files=20000"; \
+    echo "opcache.validate_timestamps=0"; \
+    } > /usr/local/etc/php/conf.d/opcache.ini
+
+# --- Node: necessário apenas se o projeto tiver build de assets (Vite/Mix). ---
+# Remova este bloco (e o "npm ci && npm run build" abaixo) em projetos API-only / Blade puro.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www
+
+COPY . .
+
+# bootstrap/cache e storage são excluídos pelo .dockerignore; o artisan precisa deles pra bootar.
+RUN mkdir -p bootstrap/cache storage/framework/views storage/framework/cache storage/framework/sessions
+
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --optimize-autoloader \
+    --no-scripts
+
+# --- Build de assets: REMOVA se o projeto não tiver frontend buildado. ---
+RUN npm ci && npm run build && rm -rf node_modules
+# ------------------------------------------------------------------------
+
+RUN composer run-script post-autoload-dump || true
+
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 755 storage bootstrap/cache
+
+COPY docker/nginx/prod.conf /etc/nginx/sites-available/default
+
+COPY docker/supervisor/app.conf /etc/supervisor/conf.d/app.conf
+
+RUN mkdir -p /var/log/supervisor
+
+EXPOSE 80
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
