@@ -16,10 +16,12 @@ um app Laravel limpo e começa a desenvolver.
 | `.env.example` | Variáveis alinhadas com o stack (Postgres + Redis) |
 | `.github/workflows/` | CI (`tests`) + deploy (`build-push`, `deploy-production`, `rollback`) |
 | `vps-deployment/` | Wizard de provisionamento + automações (Traefik, Let's Encrypt, backup, health-check) |
-| `init.sh` | Renomeia o projeto (token `myapp` → seu slug) |
+| `init.sh` | Aplica o provisionamento ao app (copia a infra, troca `myapp` → seu slug, prepara o ambiente local) |
 | `docs/base-laravel-deploy-blueprint.md` | Documento que explica todas as decisões e a origem (siscom) |
 
-> O nome do projeto é o token **`myapp`** em todos os arquivos. Rode `./init.sh <slug>` para trocá-lo.
+> Este repo é **só o provisionamento**: você o clona para dentro de um app Laravel e roda o `init.sh`,
+> que copia a infra para a raiz do app e troca o token **`myapp`** pelo seu slug. O repo do
+> provisionamento permanece intacto (com `myapp`), então é reutilizável em outros projetos.
 
 ## Como usar num projeto novo
 
@@ -28,21 +30,23 @@ um app Laravel limpo e começa a desenvolver.
 composer create-project laravel/laravel meu-app
 cd meu-app
 
-# 2. Traga os arquivos do scaffold para dentro do app
-#    (copie docker/, docker-compose.yml, Dockerfile.prod, .dockerignore,
-#     .github/, vps-deployment/, init.sh — mescle .env.example e .gitignore)
+# 2. Clone o provisionamento para dentro do app
+git clone <repo-do-provisionamento> provisioning
 
-# 3. Renomeie o projeto
-./init.sh meu-app
-
-# 4. Suba o ambiente local
-docker network create web      # uma vez (rede do Traefik); ou exponha o nginx via ports
-cp .env.example .env
-docker compose up -d
-docker compose exec php php artisan key:generate
-docker compose exec php php artisan migrate
+# 3. Aplique o provisionamento (copia a infra, troca myapp → slug, prepara o .env,
+#    e pergunta se quer subir os containers). Slug default = nome da pasta do app.
+./provisioning/init.sh meu-app
 # App: http://meu-app.localhost   |  Mailpit: http://localhost:8027
 ```
+
+O `init.sh` detecta a raiz do app automaticamente (procura `artisan`/`composer.json`), copia
+`docker/`, `docker-compose.yml`, `Dockerfile.prod`, `.dockerignore`, `.github/` e `vps-deployment/`,
+faz backup do `.env`/`.env.example` originais e adiciona o bloco de segredos ao `.gitignore`. Se
+preferir não subir os containers na hora, ele imprime os comandos no final.
+
+Como `vps-deployment/`, `.github/` e os arquivos do Docker são copiados para a raiz do app, o deploy
+na VPS roda direto de lá (`bash vps-deployment/setup.sh`). Ao final, o `init.sh` ainda **oferece
+apagar o clone `provisioning/`**, já redundante.
 
 ## Deploy em VPS
 
