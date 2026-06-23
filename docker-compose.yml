@@ -82,7 +82,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
     ports:
-      - "5434:5432"
+      - "${POSTGRES_FORWARD_PORT:-5434}:5432"
 
     networks:
       - internal
@@ -101,7 +101,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
 
     ports:
-      - "5052:80"
+      - "${PGADMIN_FORWARD_PORT:-5052}:80"
 
     labels:
       - "traefik.enable=true"
@@ -123,7 +123,7 @@ services:
       - redis_data:/data
 
     ports:
-      - "6381:6379"
+      - "${REDIS_FORWARD_PORT:-6381}:6379"
 
     networks:
       - internal
@@ -132,8 +132,8 @@ services:
     image: axllent/mailpit
 
     ports:
-      - "1027:1025"
-      - "8027:8025"
+      - "${MAILPIT_SMTP_FORWARD_PORT:-1027}:1025"
+      - "${MAILPIT_UI_FORWARD_PORT:-8027}:8025"
 
     networks:
       - internal

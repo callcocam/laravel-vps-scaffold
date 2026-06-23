@@ -34,14 +34,17 @@ cd meu-app
 git clone <repo-do-provisionamento> provisioning
 
 # 3. Aplique o provisionamento (copia a infra, troca myapp → slug, prepara o .env,
-#    e pergunta se quer subir os containers). Slug default = nome da pasta do app.
+#    copia um guia para README.provisioning.md e pergunta se quer subir os containers).
+#    Slug default = nome da pasta do app.
 ./provisioning/init.sh meu-app
 # App: http://meu-app.localhost   |  Mailpit: http://localhost:8027
 ```
 
 O `init.sh` detecta a raiz do app automaticamente (procura `artisan`/`composer.json`), copia
 `docker/`, `docker-compose.yml`, `Dockerfile.prod`, `.dockerignore`, `.github/` e `vps-deployment/`,
-faz backup do `.env`/`.env.example` originais e adiciona o bloco de segredos ao `.gitignore`. Se
+cria `README.provisioning.md` no app com as instruções do scaffold, faz backup do `.env`/`.env.example`
+originais e adiciona o bloco de segredos ao `.gitignore`. Antes de subir, ele também verifica conflito
+de portas locais e orienta ajustar as variáveis `*_FORWARD_PORT` no `.env` quando necessário. Se
 preferir não subir os containers na hora, ele imprime os comandos no final.
 
 Como `vps-deployment/`, `.github/` e os arquivos do Docker são copiados para a raiz do app, o deploy
@@ -72,5 +75,7 @@ Detalhes e a rationale completa em [docs/base-laravel-deploy-blueprint.md](docs/
 - **Sem frontend buildado (Blade puro / API-only):** no `Dockerfile.prod`, remova o bloco do Node e o
   `npm ci && npm run build`. O workflow `tests` e `Dockerfile.prod` já são tolerantes à ausência de `package.json`.
 - **Com Vite (Inertia/Vue/React/Livewire+Vite):** mantenha tudo como está.
-- **Portas locais:** ajustadas para não colidir entre projetos (Postgres `5434`, Redis `6381`,
-  Mailpit `1027/8027`, pgAdmin `5052`). Veja `docker/DOCKER.md`.
+- **Portas locais:** configuráveis por `.env` (`POSTGRES_FORWARD_PORT`, `PGADMIN_FORWARD_PORT`,
+  `REDIS_FORWARD_PORT`, `MAILPIT_SMTP_FORWARD_PORT`, `MAILPIT_UI_FORWARD_PORT`). Defaults: Postgres
+  `5434`, Redis `6381`, Mailpit `1027/8027`, pgAdmin `5052`. Se alguma já estiver em uso, o `init.sh`
+  encontra a próxima porta livre, sugere e oferece gravar a alternativa no `.env`. Veja `docker/DOCKER.md`.

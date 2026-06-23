@@ -74,6 +74,14 @@ for item in "${DEPLOY_ITEMS[@]}"; do
     ok "${item}"
 done
 
+README_TARGET="${TARGET}/README.provisioning.md"
+if [[ -f "${README_TARGET}" ]]; then
+    cp -a "${README_TARGET}" "${README_TARGET}.bak"
+    warn "README.provisioning.md existente salvo em README.provisioning.md.bak"
+fi
+cp -a "${SCRIPT_DIR}/README.md" "${README_TARGET}"
+ok "README.provisioning.md"
+
 # --- 2. .env.example / .env -----------------------------------------------
 step "Configurando .env"
 if [[ -f "${TARGET}/.env.example" ]] && ! cmp -s "${SCRIPT_DIR}/.env.example" "${TARGET}/.env.example"; then
@@ -133,10 +141,112 @@ else
     warn "Docker não encontrado — pulei a criação da rede 'web'"
 fi
 
+env_val_or_default() {
+    local key="$1"
+    local def="$2"
+    local val
+    val="$(grep -E "^${key}=" "${TARGET}/.env" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+    val="${val%\"}"
+    val="${val#\"}"
+    [[ -n "${val}" ]] && echo "${val}" || echo "${def}"
+}
+
+POSTGRES_FWD_PORT="$(env_val_or_default POSTGRES_FORWARD_PORT 5434)"
+PGADMIN_FWD_PORT="$(env_val_or_default PGADMIN_FORWARD_PORT 5052)"
+REDIS_FWD_PORT="$(env_val_or_default REDIS_FORWARD_PORT 6381)"
+MAILPIT_SMTP_FWD_PORT="$(env_val_or_default MAILPIT_SMTP_FORWARD_PORT 1027)"
+MAILPIT_UI_FWD_PORT="$(env_val_or_default MAILPIT_UI_FORWARD_PORT 8027)"
+
+port_in_use() { ss -ltn "( sport = :$1 )" 2>/dev/null | tail -n +2 | grep -q .; }
+
+declare -A CLAIMED=()
+# Próxima porta livre >= start (pula portas em uso no host e já reservadas aqui).
+find_free_port() {
+    local p="$1" tries=0
+    while (( tries < 500 )); do
+        if [[ -z "${CLAIMED[$p]:-}" ]] && ! port_in_use "$p"; then
+            echo "$p"; return 0
+        fi
+        ((p++)); ((tries++))
+    done
+    return 1
+}
+# Upsert KEY=VAL no arquivo .env.
+set_env_var() {
+    local key="$1" val="$2" file="$3"
+    if grep -qE "^${key}=" "${file}" 2>/dev/null; then
+        sed -i -E "s#^${key}=.*#${key}=${val}#" "${file}"
+    else
+        printf '%s=%s\n' "${key}" "${val}" >> "${file}"
+    fi
+}
+
+PORT_KEYS=(POSTGRES_FORWARD_PORT PGADMIN_FORWARD_PORT REDIS_FORWARD_PORT MAILPIT_SMTP_FORWARD_PORT MAILPIT_UI_FORWARD_PORT)
+PORT_LABELS=("Postgres" "pgAdmin" "Redis" "Mailpit SMTP" "Mailpit UI")
+PORT_CURRENT=("${POSTGRES_FWD_PORT}" "${PGADMIN_FWD_PORT}" "${REDIS_FWD_PORT}" "${MAILPIT_SMTP_FWD_PORT}" "${MAILPIT_UI_FWD_PORT}")
+
+PORT_CONFLICT=0
+declare -a SUGGEST_KEYS=() SUGGEST_VALS=()
+if command -v ss >/dev/null 2>&1; then
+    step "Verificando conflitos de porta no host"
+    for i in "${!PORT_KEYS[@]}"; do
+        key="${PORT_KEYS[$i]}"; label="${PORT_LABELS[$i]}"; cur="${PORT_CURRENT[$i]}"
+        if [[ -n "${CLAIMED[$cur]:-}" ]] || port_in_use "${cur}"; then
+            if new="$(find_free_port "${cur}")"; then
+                warn "porta ${cur} em uso (${label}) → sugerida ${new}"
+                CLAIMED[$new]=1
+                PORT_CURRENT[$i]="${new}"
+                SUGGEST_KEYS+=("${key}"); SUGGEST_VALS+=("${new}")
+                PORT_CONFLICT=1
+            else
+                warn "porta ${cur} em uso (${label}) — nenhuma alternativa livre encontrada"
+                PORT_CONFLICT=1
+            fi
+        else
+            ok "${label}: ${cur} livre"
+            CLAIMED[$cur]=1
+        fi
+    done
+
+    # Reflete as portas escolhidas nas variáveis usadas adiante.
+    POSTGRES_FWD_PORT="${PORT_CURRENT[0]}"; PGADMIN_FWD_PORT="${PORT_CURRENT[1]}"
+    REDIS_FWD_PORT="${PORT_CURRENT[2]}";    MAILPIT_SMTP_FWD_PORT="${PORT_CURRENT[3]}"
+    MAILPIT_UI_FWD_PORT="${PORT_CURRENT[4]}"
+
+    if [[ "${#SUGGEST_KEYS[@]}" -gt 0 ]]; then
+        APPLY="no"
+        if [[ -t 0 ]]; then
+            read -r -p "$(echo -e "  ${BOLD}Aplicar as portas sugeridas no .env? [Y/n]:${RESET} ")" ans
+            [[ "${ans:-Y}" =~ ^[Nn] ]] || APPLY="yes"
+        fi
+        if [[ "${APPLY}" == "yes" ]]; then
+            for j in "${!SUGGEST_KEYS[@]}"; do
+                set_env_var "${SUGGEST_KEYS[$j]}" "${SUGGEST_VALS[$j]}" "${TARGET}/.env"
+            done
+            ok "portas aplicadas no .env"
+            PORT_CONFLICT=0
+        else
+            warn "Sem aplicar — ajuste manualmente no .env antes de subir:"
+            for j in "${!SUGGEST_KEYS[@]}"; do
+                warn "  ${SUGGEST_KEYS[$j]}=${SUGGEST_VALS[$j]}"
+            done
+        fi
+    elif [[ "${PORT_CONFLICT}" -eq 0 ]]; then
+        ok "sem conflitos detectados"
+    fi
+else
+    warn "comando 'ss' não encontrado — pulei a verificação de portas"
+fi
+
 UP="no"
 if command -v docker >/dev/null 2>&1 && [[ -t 0 ]]; then
-    read -r -p "$(echo -e "  ${BOLD}Subir os containers agora? [Y/n]:${RESET} ")" ans
-    [[ "${ans:-Y}" =~ ^[Nn] ]] || UP="yes"
+    if [[ "${PORT_CONFLICT}" -eq 1 ]]; then
+        read -r -p "$(echo -e "  ${BOLD}Conflito detectado. Tentar subir mesmo assim? [y/N]:${RESET} ")" ans
+        [[ "${ans:-N}" =~ ^[Yy] ]] && UP="yes"
+    else
+        read -r -p "$(echo -e "  ${BOLD}Subir os containers agora? [Y/n]:${RESET} ")" ans
+        [[ "${ans:-Y}" =~ ^[Nn] ]] || UP="yes"
+    fi
 fi
 
 if [[ "${UP}" == "yes" ]]; then
@@ -180,7 +290,8 @@ fi
 
 cat <<EOF
   App:     http://${SLUG}.localhost
-  pgAdmin: http://pgadmin.${SLUG}.localhost   |  Mailpit: http://localhost:8027
+    pgAdmin: http://pgadmin.${SLUG}.localhost   |  Mailpit: http://localhost:${MAILPIT_UI_FWD_PORT}
+    Guia:    README.provisioning.md
 
 Deploy na VPS (depois): bash vps-deployment/setup.sh
   (vps-deployment/, .github/ e arquivos Docker já estão na raiz do app)
