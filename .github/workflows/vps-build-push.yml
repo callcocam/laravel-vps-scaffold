@@ -23,8 +23,14 @@ jobs:
       - name: Setup Buildx
         run: docker buildx create --name builder --use --bootstrap
 
+      # Usa o GITHUB_TOKEN efêmero do próprio workflow (já tem packages:write
+      # via o bloco permissions acima). NÃO depende de um secret GHCR_PAT, que o
+      # setup.sh não cria — usar GHCR_PAT deixava a senha vazia e o login falhava
+      # com "Cannot perform an interactive login from a non TTY device".
+      # Só troque por um PAT (secrets.GHCR_PAT) se precisar push/pull entre repos
+      # diferentes do mesmo owner.
       - name: Login GHCR
-        run: echo "${{ secrets.GHCR_PAT }}" | docker login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
 
       - name: Resolve context
         id: context

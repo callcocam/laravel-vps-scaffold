@@ -117,6 +117,12 @@ if [[ "${DEPLOY_USER}" == "root" ]]; then
     run_cmd "touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
     if [[ "${DRY_RUN}" != "true" ]]; then
         if ! grep -Fq "${GITHUB_DEPLOY_PUBLIC_KEY}" /root/.ssh/authorized_keys; then
+            # Garante que o arquivo termina em newline antes de adicionar — se a última
+            # linha existente não tiver \n, a nova chave gruda nela e o sshd a ignora
+            # (tratando-a como comentário da chave anterior) → "Permission denied".
+            if [[ -s /root/.ssh/authorized_keys && -n "$(tail -c1 /root/.ssh/authorized_keys)" ]]; then
+                printf '\n' >> /root/.ssh/authorized_keys
+            fi
             printf '%s\n' "${GITHUB_DEPLOY_PUBLIC_KEY}" >> /root/.ssh/authorized_keys
             log_info "Chave deploy adicionada ao authorized_keys do root"
         else
@@ -160,6 +166,10 @@ else
     run_cmd "chmod 600 ${DEPLOY_HOME}/.ssh/authorized_keys"
     if [[ "${DRY_RUN}" != "true" ]]; then
         if ! grep -Fq "${GITHUB_DEPLOY_PUBLIC_KEY}" "${DEPLOY_HOME}/.ssh/authorized_keys"; then
+            # Garante newline final antes de adicionar (ver explicação na ramificação root)
+            if [[ -s "${DEPLOY_HOME}/.ssh/authorized_keys" && -n "$(tail -c1 "${DEPLOY_HOME}/.ssh/authorized_keys")" ]]; then
+                printf '\n' >> "${DEPLOY_HOME}/.ssh/authorized_keys"
+            fi
             printf '%s\n' "${GITHUB_DEPLOY_PUBLIC_KEY}" >> "${DEPLOY_HOME}/.ssh/authorized_keys"
             log_info "Chave deploy adicionada ao authorized_keys do ${DEPLOY_USER}"
         else

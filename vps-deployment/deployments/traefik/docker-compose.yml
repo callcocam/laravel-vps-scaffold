@@ -14,11 +14,28 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # DESAFIO ACME — escolha UM:
+      #
+      # (A) tls-alpn-01 (padrão): funciona quando o DNS aponta DIRETO para a VPS.
+      #     NÃO funciona se o domínio estiver atrás do proxy da Cloudflare (nuvem
+      #     laranja): a Cloudflare termina o TLS na borda e o desafio nunca chega
+      #     ao Traefik → erro "Cannot negotiate ALPN protocol acme-tls/1".
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      #
+      # (B) dns-01 via Cloudflare: USE ESTE se os domínios ficam atrás do proxy
+      #     da Cloudflare. Comente as 3 linhas tlschallenge acima, descomente as
+      #     3 abaixo e defina CF_DNS_API_TOKEN no .env (token com Zone:DNS:Edit +
+      #     Zone:Read). Também suporta certificados wildcard.
+      # - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      # - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      # - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--log.level=INFO"
       - "--accesslog=true"
+    # Necessário apenas para o desafio dns-01 (B) acima:
+    # environment:
+    #   - "CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}"
     ports:
       - "80:80"
       - "443:443"

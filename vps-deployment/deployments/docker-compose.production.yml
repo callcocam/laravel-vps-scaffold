@@ -13,19 +13,24 @@ services:
       - prod-network
       - traefik-global
     labels:
+      # IMPORTANTE: os nomes de router/service/middleware incluem o prefixo
+      # "myapp" (substituído pelo slug do projeto pelo init.sh). Isso os torna
+      # ÚNICOS por projeto no Traefik compartilhado. Sem o prefixo, dois projetos
+      # com APP_SLUG=production colidem em "production-app", e o Traefik descarta
+      # a rota em conflito ("Router defined multiple times") → o site dá 404.
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-global"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.entrypoints=websecure"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.tls=true"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.priority=1"
-      - "traefik.http.services.${APP_SLUG:-production}-app.loadbalancer.server.port=80"
-      - "traefik.http.middlewares.${APP_SLUG:-production}-sec.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.${APP_SLUG:-production}-sec.headers.browserXssFilter=true"
-      - "traefik.http.middlewares.${APP_SLUG:-production}-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.${APP_SLUG:-production}-sec.headers.frameDeny=true"
-      - "traefik.http.routers.${APP_SLUG:-production}-app.middlewares=${APP_SLUG:-production}-sec"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.entrypoints=websecure"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.tls=true"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.priority=1"
+      - "traefik.http.services.myapp-${APP_SLUG:-production}-app.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.myapp-${APP_SLUG:-production}-sec.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.myapp-${APP_SLUG:-production}-sec.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.myapp-${APP_SLUG:-production}-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.myapp-${APP_SLUG:-production}-sec.headers.frameDeny=true"
+      - "traefik.http.routers.myapp-${APP_SLUG:-production}-app.middlewares=myapp-${APP_SLUG:-production}-sec"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/up"]
       interval: 15s

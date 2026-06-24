@@ -28,6 +28,11 @@ jobs:
       )
     runs-on: ubuntu-latest
     environment: production
+    # packages:read permite que a VPS faça docker login no GHCR com o
+    # GITHUB_TOKEN efêmero (a imagem é privada por padrão).
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -101,10 +106,17 @@ jobs:
 
       - name: Deploy app
         uses: appleboy/ssh-action@v1.2.0
+        # Passa o GITHUB_TOKEN efêmero para a VPS para autenticar no GHCR
+        # antes do pull (imagem privada). Sem isso o pull falha com
+        # "error from registry: unauthorized".
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.APP_HOST }}
           username: ${{ secrets.APP_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GHCR_TOKEN,GHCR_ACTOR
           timeout: 2m
           command_timeout: 20m
           script: |
@@ -141,6 +153,7 @@ jobs:
             else
               printf 'GHCR_REPO=%s\n' "${GHCR_REPO}" >> .env
             fi
+            echo "${GHCR_TOKEN}" | docker login ghcr.io --username "${GHCR_ACTOR}" --password-stdin
             docker compose -p "myapp-${APP_SLUG}" pull
             docker compose -p "myapp-${APP_SLUG}" up -d --force-recreate --remove-orphans
             docker compose -p "myapp-${APP_SLUG}" exec -T app sh -lc '
