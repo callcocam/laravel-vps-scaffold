@@ -3,7 +3,8 @@
 set -euo pipefail
 
 APP_SLUG="${1:-production}"
-APP_DIR="/opt/myapp/${APP_SLUG}"
+APP_NAME="${APP_NAME:-myapp}"
+APP_DIR="/opt/${APP_SLUG}/${APP_NAME}"
 PROJECT_NAME="myapp-${APP_SLUG}"
 EXPECTED_ASSET="${2:-}"
 

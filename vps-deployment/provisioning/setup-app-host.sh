@@ -18,7 +18,7 @@ require_root
 load_manifest "${MANIFEST_PATH}"
 
 APP_SLUG="${APP_SLUG:-${APP_NAME:-production}}"
-APP_DIR="/opt/myapp/${APP_SLUG}"
+APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
 APP_ENV="${APP_ENV:-production}"
 DOMAIN="${DOMAIN:-${DOMAIN_PRODUCTION:-}}"
 DB_MODE="${DB_MODE:-local}"

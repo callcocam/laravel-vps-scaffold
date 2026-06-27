@@ -19,8 +19,9 @@ fi
 
 DEPLOY_USER="${DEPLOY_USER:-root}"
 APP_SLUG="${APP_SLUG:-production}"
+PROJECT_NAME="${PROJECT_NAME:-myapp}"
 START_SERVICES="${START_SERVICES:-false}"
-APP_DIR="/opt/myapp/${APP_SLUG}"
+APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "[ERRO] Este script precisa rodar como root."

@@ -48,7 +48,7 @@
 # Na VPS, como root:
 sudo -u postgres psql -c "ALTER USER myapp_production PASSWORD 'nova-senha-forte';"
 
-# Atualizar /opt/myapp/production/.env com a nova senha
+# Atualizar /opt/production/<PROJECT_NAME>/.env com a nova senha
 # Reiniciar os containers:
 docker compose -p myapp-production restart
 ```

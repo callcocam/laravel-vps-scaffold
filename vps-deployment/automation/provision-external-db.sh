@@ -347,7 +347,7 @@ fi
 APP_VPS_HOST="${VPS_HOST:-}"
 if [[ "${NEW_PASSWORDS}" == "true" && -n "${APP_VPS_HOST}" ]]; then
     APP_SSH_USER="${DEPLOY_USER:-root}"
-    APP_DIR="/opt/myapp/${APP_SLUG}"
+    APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
     APP_ENV_FILE="${APP_DIR}/.env"
 
     log_info "Atualizando senhas no .env do app em ${APP_VPS_HOST}"
@@ -381,5 +381,5 @@ if [[ "${NEW_PASSWORDS}" == "true" ]]; then
     log_info "  3. Novas senhas gravadas no manifest.env"
 fi
 log_info "  4. Para apontar o app para o banco externo, atualize o .env na VPS:"
-log_info "     ssh ${APP_SLUG}-vps \"sed -i 's|^DB_HOST=.*|DB_HOST=${DB_HOST_ARG}|' /opt/myapp/${APP_SLUG}/.env\""
-log_info "     ssh ${APP_SLUG}-vps \"cd /opt/myapp/${APP_SLUG} && docker compose up -d\""
+log_info "     ssh ${APP_SLUG}-vps \"sed -i 's|^DB_HOST=.*|DB_HOST=${DB_HOST_ARG}|' /opt/${APP_SLUG}/${PROJECT_NAME}/.env\""
+log_info "     ssh ${APP_SLUG}-vps \"cd /opt/${APP_SLUG}/${PROJECT_NAME} && docker compose up -d\""

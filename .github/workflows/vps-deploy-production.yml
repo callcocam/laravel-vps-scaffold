@@ -72,9 +72,19 @@ jobs:
             echo "WARNING: image_tag '${IMAGE_TAG}' does not start with 'production-'."
           fi
 
+          PROJECT_NAME="${{ vars.PROJECT_NAME }}"
+          if [[ -z "${PROJECT_NAME}" || "${PROJECT_NAME}" == "null" ]]; then
+            PROJECT_NAME="${{ github.event.repository.name }}"
+          fi
+          if [[ ! "${PROJECT_NAME}" =~ ^[a-z0-9_-]{1,63}$ ]]; then
+            echo "Invalid PROJECT_NAME '${PROJECT_NAME}'. Use [a-z0-9_-], max 63 chars."
+            exit 1
+          fi
+
           {
             echo "app_slug=${APP_SLUG}"
             echo "image_tag=${IMAGE_TAG}"
+            echo "project_name=${PROJECT_NAME}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Sync docker-compose to VPS (attempt 1)
@@ -88,7 +98,7 @@ jobs:
           timeout: 2m
           command_timeout: 15m
           source: "vps-deployment/deployments/docker-compose.production.yml"
-          target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
+          target: "/opt/${{ steps.context.outputs.app_slug }}/${{ steps.context.outputs.project_name }}/"
           strip_components: 2
 
       - name: Sync docker-compose to VPS (retry)
@@ -101,7 +111,7 @@ jobs:
           timeout: 2m
           command_timeout: 15m
           source: "vps-deployment/deployments/docker-compose.production.yml"
-          target: "/opt/myapp/${{ steps.context.outputs.app_slug }}/"
+          target: "/opt/${{ steps.context.outputs.app_slug }}/${{ steps.context.outputs.project_name }}/"
           strip_components: 2
 
       - name: Deploy app
@@ -124,7 +134,8 @@ jobs:
             echo "WORKFLOW_VERSION=vps-deploy-production-2026-05-03"
 
             APP_SLUG="${{ steps.context.outputs.app_slug }}"
-            APP_DIR="/opt/myapp/${APP_SLUG}"
+            PROJECT_NAME="${{ steps.context.outputs.project_name }}"
+            APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
 
             if [[ ! -d "${APP_DIR}" ]]; then
               echo "Missing APP_DIR '${APP_DIR}'. Provision this environment first."
@@ -240,7 +251,8 @@ jobs:
           script: |
             set -euo pipefail
             APP_SLUG="${{ steps.context.outputs.app_slug }}"
-            APP_DIR="/opt/myapp/${APP_SLUG}"
+            PROJECT_NAME="${{ steps.context.outputs.project_name }}"
+            APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
             if [[ ! -d "${APP_DIR}" ]]; then
               echo "Missing APP_DIR '${APP_DIR}'."
               exit 1

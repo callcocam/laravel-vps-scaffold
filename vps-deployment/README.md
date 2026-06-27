@@ -4,7 +4,7 @@ Provisionamento e deploy do `myapp` no VPS, ambiente production. Banco com conex
 
 ## Resumo Operacional
 - App de uma instância no domínio `DOMAIN` (ex.: `app.example.com`).
-- Caminho da instância: `/opt/myapp/<APP_SLUG>`.
+- Caminho da instância: `/opt/<APP_SLUG>/<PROJECT_NAME>`.
 - Traefik compartilhado: `/opt/traefik`.
 - Deploy automático: branch `main` -> workflow de production.
 - Health check do CI: interno no container (`http://127.0.0.1/up`).
@@ -55,7 +55,7 @@ ssh -i ~/.ssh/id_ed25519_<repo>_deploy deploy@<VPS_IP>
 
 ### No VPS
 ```bash
-cd /opt/myapp/<APP_SLUG>
+cd /opt/<APP_SLUG>/<PROJECT_NAME>
 docker compose -p myapp-<APP_SLUG> ps
 docker compose -p myapp-<APP_SLUG> exec -T app sh -lc 'curl -fsS http://127.0.0.1/up >/dev/null && echo OK'
 ```
@@ -121,7 +121,7 @@ Correção: criar registros DNS, aguardar janela de retry e reiniciar Traefik.
 ### 7) `SQLSTATE[HY000] [2002] Connection timed out` no migrate
 Causa: app em container sem rota/permit para o banco local no host.
 ```bash
-cd /opt/myapp/<APP_SLUG>
+cd /opt/<APP_SLUG>/<PROJECT_NAME>
 grep -E '^(DB_HOST|DB_CONNECTION)=' .env
 # esperado para local:
 # DB_HOST=host.docker.internal
@@ -142,8 +142,8 @@ Prevenção: os workflows de deploy/rollback já preparam esses diretórios ante
 ### 9) `Redis connection [...] not configured`
 Causa: `SESSION_DRIVER=redis` apontando para uma conexão Redis inexistente.
 ```bash
-sed -i 's/^SESSION_CONNECTION=.*/SESSION_CONNECTION=default/' /opt/myapp/<APP_SLUG>/.env
-grep -q '^REDIS_CACHE_CONNECTION=' /opt/myapp/<APP_SLUG>/.env || echo 'REDIS_CACHE_CONNECTION=cache' >> /opt/myapp/<APP_SLUG>/.env
+sed -i 's/^SESSION_CONNECTION=.*/SESSION_CONNECTION=default/' /opt/<APP_SLUG>/<PROJECT_NAME>/.env
+grep -q '^REDIS_CACHE_CONNECTION=' /opt/<APP_SLUG>/<PROJECT_NAME>/.env || echo 'REDIS_CACHE_CONNECTION=cache' >> /opt/<APP_SLUG>/<PROJECT_NAME>/.env
 docker compose -p myapp-<APP_SLUG> up -d --force-recreate
 ```
 Prevenção: `setup-app-host.sh` já escreve `SESSION_CONNECTION=default` e `REDIS_CACHE_CONNECTION=cache`.
@@ -151,7 +151,7 @@ Prevenção: `setup-app-host.sh` já escreve `SESSION_CONNECTION=default` e `RED
 ### 10) `GET /dashboard 404` no domínio principal
 Causa: `DOMAIN`/`APP_URL` ausente ou incorreto no `.env`.
 ```bash
-sed -i 's|^APP_URL=.*|APP_URL=https://app.example.com|' /opt/myapp/<APP_SLUG>/.env
+sed -i 's|^APP_URL=.*|APP_URL=https://app.example.com|' /opt/<APP_SLUG>/<PROJECT_NAME>/.env
 docker compose -p myapp-<APP_SLUG> exec -T app php artisan optimize:clear
 docker compose -p myapp-<APP_SLUG> up -d --force-recreate
 ```

@@ -325,7 +325,8 @@ if [[ "${GH_OK}" == "true" ]]; then
     info "Configurando variables..."
     gh_var DOMAIN          "${DOMAIN}"
     gh_var GHCR_REPO       "${GHCR_REPO}"
-    gh_var DEPLOY_PATH     "/opt/myapp/${APP_SLUG}"  "${DEPLOY_ENV}"
+    gh_var PROJECT_NAME    "${PROJECT_NAME}"
+    gh_var DEPLOY_PATH     "/opt/${APP_SLUG}/${PROJECT_NAME}"  "${DEPLOY_ENV}"
     gh_var COMPOSE_FILE    "${COMPOSE_FILE_NAME}"         "${DEPLOY_ENV}"
 
     ok "Secrets/variables de ${DEPLOY_ENV} configurados"
@@ -345,9 +346,10 @@ else
     echo ""
     echo -e "  ${BOLD}3. Variables${RESET} (repositório)"
     echo "     GHCR_REPO    = ${GHCR_REPO}"
+    echo "     PROJECT_NAME = ${PROJECT_NAME}"
     echo ""
     echo -e "  ${BOLD}4. Variables${RESET} (environment: ${DEPLOY_ENV})"
-    echo "     DEPLOY_PATH  = /opt/myapp/${APP_SLUG}"
+    echo "     DEPLOY_PATH  = /opt/${APP_SLUG}/${PROJECT_NAME}"
     echo "     COMPOSE_FILE = ${COMPOSE_FILE_NAME}"
     echo ""
     read -r -p "  Pressione ENTER após configurar manualmente..."
@@ -414,7 +416,7 @@ fi
 _app_provisioned=false
 if [[ "${_deploy_ssh_ok}" == "true" ]]; then
     if ${SSH_DEPLOY} -o ConnectTimeout=8 -o BatchMode=yes "${DEPLOY_USER}@${VPS_HOST}" \
-        "test -f /opt/myapp/${APP_SLUG}/.env" >/dev/null 2>&1; then
+        "test -f /opt/${APP_SLUG}/${PROJECT_NAME}/.env" >/dev/null 2>&1; then
         _app_provisioned=true
     fi
 fi
@@ -427,30 +429,32 @@ if [[ "${_app_provisioned}" == "false" ]]; then
         ask_choice PROVISION_MODE "Modo de provisionamento (normal|reset)" "normal" normal reset
 
         if [[ "${PROVISION_MODE}" == "reset" ]]; then
-            warn "Reset da instância '${APP_SLUG}': remove /opt/myapp/${APP_SLUG} (não remove banco)"
+            warn "Reset da instância '${APP_SLUG}': remove /opt/${APP_SLUG}/${PROJECT_NAME} (não remove banco)"
             if [[ "${_deploy_ssh_ok}" == "true" ]]; then
                 ${SSH_DEPLOY} "${DEPLOY_USER}@${VPS_HOST}" "
                     set -euo pipefail
                     APP_SLUG='${APP_SLUG}'
+                    PROJECT_NAME='${PROJECT_NAME}'
 
-                    if [ -d \"/opt/myapp/\${APP_SLUG}\" ] && [ -f \"/opt/myapp/\${APP_SLUG}/docker-compose.yml\" ]; then
-                        cd \"/opt/myapp/\${APP_SLUG}\" && docker compose -p \"myapp-\${APP_SLUG}\" down --remove-orphans || true
+                    if [ -d \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\" ] && [ -f \"/opt/\${APP_SLUG}/\${PROJECT_NAME}/docker-compose.yml\" ]; then
+                        cd \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\" && docker compose -p \"myapp-\${APP_SLUG}\" down --remove-orphans || true
                     fi
 
-                    rm -rf \"/opt/myapp/\${APP_SLUG}\"
-                    mkdir -p \"/opt/myapp/\${APP_SLUG}\"
+                    rm -rf \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\"
+                    mkdir -p \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\"
                 "
             else
                 ${SSH_ROOT} "${VPS_USER}@${VPS_HOST}" "
                     set -euo pipefail
                     APP_SLUG='${APP_SLUG}'
+                    PROJECT_NAME='${PROJECT_NAME}'
 
-                    if [ -d \"/opt/myapp/\${APP_SLUG}\" ] && [ -f \"/opt/myapp/\${APP_SLUG}/docker-compose.yml\" ]; then
-                        cd \"/opt/myapp/\${APP_SLUG}\" && docker compose -p \"myapp-\${APP_SLUG}\" down --remove-orphans || true
+                    if [ -d \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\" ] && [ -f \"/opt/\${APP_SLUG}/\${PROJECT_NAME}/docker-compose.yml\" ]; then
+                        cd \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\" && docker compose -p \"myapp-\${APP_SLUG}\" down --remove-orphans || true
                     fi
 
-                    rm -rf \"/opt/myapp/\${APP_SLUG}\"
-                    mkdir -p \"/opt/myapp/\${APP_SLUG}\"
+                    rm -rf \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\"
+                    mkdir -p \"/opt/\${APP_SLUG}/\${PROJECT_NAME}\"
                 "
             fi
             ok "Reset concluído para ${APP_SLUG}"
@@ -480,7 +484,7 @@ if [[ "${_app_provisioned}" == "false" ]]; then
         _install_compose=true
     fi
 else
-    info "Instância '${APP_SLUG}' já provisionada em /opt/myapp/${APP_SLUG} — pulando provisionamento."
+    info "Instância '${APP_SLUG}' já provisionada em /opt/${APP_SLUG}/${PROJECT_NAME} — pulando provisionamento."
 fi
 
 if [[ "${DB_MODE}" == "externo" ]]; then
@@ -538,7 +542,7 @@ else
 fi
 
 echo ""
-ok "Setup concluído — environment: ${DEPLOY_ENV} | diretório: /opt/myapp/${APP_SLUG}"
+ok "Setup concluído — environment: ${DEPLOY_ENV} | diretório: /opt/${APP_SLUG}/${PROJECT_NAME}"
 info "Ambiente: production | push em main aciona o deploy via GitHub Actions"
 echo ""
 echo -e "  ${BOLD}Acesso à VPS:${RESET}"

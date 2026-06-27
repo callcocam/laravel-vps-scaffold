@@ -47,8 +47,8 @@ Entregar um repositório Laravel **pré-configurado para rodar** com:
 | E-mail GUI banco (local) | pgAdmin (opcional) |
 
 **Nomenclatura:** troque o slug `myapp` por um placeholder do projeto novo (ex.: `app`). Onde este doc
-mostra `myapp`/`myapp-<APP_SLUG>`/`/opt/myapp/...`, parametrize por `PROJECT_NAME`/`APP_SLUG`.
-Mantenha o **padrão** de caminhos (`/opt/<project>/<app_slug>`) — só o nome muda.
+mostra `myapp`/`myapp-<APP_SLUG>`/`/opt/<APP_SLUG>/<PROJECT_NAME>/...`, parametrize por `PROJECT_NAME`/`APP_SLUG`.
+Mantenha o **padrão** de caminhos (`/opt/<app_slug>/<project>`) — só o nome muda.
 
 ---
 

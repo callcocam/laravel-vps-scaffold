@@ -50,11 +50,21 @@ jobs:
 
           IMAGE_TAG="${{ github.event.inputs.image_tag }}"
 
+          PROJECT_NAME="${{ vars.PROJECT_NAME }}"
+          if [[ -z "${PROJECT_NAME}" || "${PROJECT_NAME}" == "null" ]]; then
+            PROJECT_NAME="${{ github.event.repository.name }}"
+          fi
+          if [[ ! "${PROJECT_NAME}" =~ ^[a-z0-9_-]{1,63}$ ]]; then
+            echo "Invalid PROJECT_NAME '${PROJECT_NAME}'. Use [a-z0-9_-], max 63 chars."
+            exit 1
+          fi
+
           {
             echo "branch_name=${BRANCH_NAME}"
             echo "branch_slug=${BRANCH_SLUG}"
             echo "app_slug=${APP_SLUG}"
             echo "image_tag=${IMAGE_TAG}"
+            echo "project_name=${PROJECT_NAME}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Rollback deploy
@@ -69,8 +79,9 @@ jobs:
             BRANCH_NAME="${{ steps.context.outputs.branch_name }}"
             BRANCH_SLUG="${{ steps.context.outputs.branch_slug }}"
             APP_SLUG="${{ steps.context.outputs.app_slug }}"
+            PROJECT_NAME="${{ steps.context.outputs.project_name }}"
 
-            APP_DIR="/opt/myapp/${APP_SLUG}"
+            APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
             if [[ ! -d "${APP_DIR}" ]]; then
               echo "Missing APP_DIR '${APP_DIR}'."
               exit 1
@@ -124,7 +135,8 @@ jobs:
           script: |
             set -euo pipefail
             APP_SLUG="${{ steps.context.outputs.app_slug }}"
-            APP_DIR="/opt/myapp/${APP_SLUG}"
+            PROJECT_NAME="${{ steps.context.outputs.project_name }}"
+            APP_DIR="/opt/${APP_SLUG}/${PROJECT_NAME}"
             if [[ ! -d "${APP_DIR}" ]]; then
               echo "Missing APP_DIR '${APP_DIR}'."
               exit 1

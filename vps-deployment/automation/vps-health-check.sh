@@ -21,6 +21,7 @@ load_manifest "${MANIFEST_PATH}"
 require_commands docker curl df free awk grep date
 
 DOMAIN="${DOMAIN:-${DOMAIN_PRODUCTION:-}}"
+PROJECT_NAME="${PROJECT_NAME:-myapp}"
 
 fail_count=0
 warn_count=0
@@ -69,9 +70,9 @@ fi
 echo ""
 echo "--- Serviços principais ---"
 check_compose_service_running "/opt/traefik" "traefik"
-check_compose_service_running "/opt/myapp/${APP_SLUG}" "app"
-check_compose_service_running "/opt/myapp/${APP_SLUG}" "queue"
-check_compose_service_running "/opt/myapp/${APP_SLUG}" "scheduler"
+check_compose_service_running "/opt/${APP_SLUG}/${PROJECT_NAME}" "app"
+check_compose_service_running "/opt/${APP_SLUG}/${PROJECT_NAME}" "queue"
+check_compose_service_running "/opt/${APP_SLUG}/${PROJECT_NAME}" "scheduler"
 
 echo ""
 echo "--- Endpoints HTTP ---"

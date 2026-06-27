@@ -14,6 +14,7 @@ Ao rodar `./setup.sh`, o script usa `gh` (GitHub CLI) para criar:
 |------|------------------|------------------|
 | `DOMAIN` | domínio da app (ex: `app.example.com`) | compose de produção (router Traefik) |
 | `GHCR_REPO` | `callcocam/myapp` | `vps-build-push` (push da imagem) |
+| `PROJECT_NAME` | nome do projeto (ex: `sigasmart`) | `vps-deploy-production`/`vps-rollback` (segmento do diretório `/opt/<APP_SLUG>/<PROJECT_NAME>`); fallback: nome do repositório |
 
 ### Environment `production` — Secrets
 
@@ -29,7 +30,7 @@ Ao rodar `./setup.sh`, o script usa `gh` (GitHub CLI) para criar:
 
 | Nome | Valor | Descrição |
 |------|-------|-----------|
-| `DEPLOY_PATH` | `/opt/myapp/production` | Diretório no VPS |
+| `DEPLOY_PATH` | `/opt/production/<PROJECT_NAME>` | Diretório no VPS |
 | `COMPOSE_FILE` | `docker-compose.production.yml` | Arquivo compose do ambiente |
 
 ---
@@ -50,7 +51,7 @@ gh secret set SSH_PRIVATE_KEY --repo "${REPO}" --env production < ~/.ssh/id_ed25
 gh secret set SSH_KNOWN_HOSTS --repo "${REPO}" --env production --body "$(ssh-keyscan -H ${VPS_HOST} 2>/dev/null)"
 
 # Variables específicas de production
-gh variable set DEPLOY_PATH  --repo "${REPO}" --env production --body "/opt/myapp/production"
+gh variable set DEPLOY_PATH  --repo "${REPO}" --env production --body "/opt/production/<PROJECT_NAME>"
 gh variable set COMPOSE_FILE --repo "${REPO}" --env production --body "docker-compose.production.yml"
 ```
 
@@ -67,7 +68,7 @@ vps-deploy-production   (environment: production)
   secrets.APP_USER
   secrets.SSH_PRIVATE_KEY
   vars.DOMAIN              ← usado no compose de produção (router Traefik)
-  → deploya em /opt/myapp/production/
+  → deploya em /opt/production/<PROJECT_NAME>/
 
 vps-rollback            (environment: production)
   secrets.APP_HOST
