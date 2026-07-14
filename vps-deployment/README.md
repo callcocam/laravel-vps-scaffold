@@ -170,6 +170,54 @@ PGADMIN_DEFAULT_EMAIL=admin@<DOMAIN>
 PGADMIN_DEFAULT_PASSWORD=<senha-forte>
 ```
 
+## Backup por tenant (opcional — multitenancy banco-por-tenant)
+O backup padrão (`automation/backup-db.sh` + `install-backup-cron.sh`) faz dump de **um**
+`DB_NAME`, coerente com a conexão única que o scaffold assume. Se o projeto adotou
+`spatie/laravel-multitenancy` com **um banco Postgres por tenant**, esse backup cobre só o
+landlord: os dados de cada cliente ficam de fora, **em silêncio**. Nesse caso use o fluxo de
+`db/`, que é opt-in e não substitui nada do fluxo padrão.
+
+Ative com `BACKUP_MULTITENANT=true` no manifest (o wizard pergunta: *"Este projeto usa
+multitenancy com um banco Postgres por tenant?"*). O `setup.sh` então instala `db/` no host do
+banco em vez de `automation/backup-db.sh`.
+
+Como funciona:
+- **Descobre os bancos pelo dono** (`BACKUP_DB_OWNERS`), não por lista de tenants — landlord +
+  cada cliente novo entram sozinhos; bancos de outros donos (testes avulsos, `postgres`) ficam
+  de fora sem lista de exclusão.
+- **Dois tiers**: `postgres-backup-hot.sh` (a cada 30min, só as tabelas de `BACKUP_HOT_TABLES`;
+  vazio = desativado) e `postgres-backup-full.sh` (diário, tudo menos `BACKUP_EXCLUDED_TABLES`,
+  cujo default são as tabelas efêmeras do Laravel).
+- **Um `.tar.gz` por banco por rodada**, com um `.tar` (`pg_dump -F c`) por tabela dentro:
+  restaura o banco inteiro ou uma tabela só.
+- Roda como usuário OS `postgres` (peer auth, sem senha no script), com `flock` contra rodadas
+  sobrepostas e retenção por contagem de rodadas — local **e** no bucket.
+- Config em `/etc/<PROJECT_NAME>/tenant-backup.env`, credenciais em
+  `spaces-backup-credentials.env` (modo 600) no mesmo diretório. **Não** em `/root`: como o
+  script roda como `postgres`, o modo 700 de `/root` bloquearia até a leitura do arquivo.
+
+Instalação manual (ou reinstalação após mudar o manifest), **no host do banco, como root**:
+```bash
+./db/install-tenant-backup-cron.sh vps-deployment/manifest.production.env
+```
+
+Valide antes de confiar no cron (ordem testada em produção):
+```bash
+# 1. um banco só (o argumento opcional restringe a rodada)
+sudo -u postgres env BACKUP_CONFIG_FILE=/etc/<PROJECT_NAME>/tenant-backup.env \
+  /usr/local/lib/postgres-backup/postgres-backup-full.sh tenant_acme
+# 2. integridade do pacote gerado
+tar -tzf /opt/backups/postgres-full/tenant_acme/<timestamp>.tar.gz
+# 3. rodada completa (sem argumento), conferindo tempo total e nº de objetos no bucket
+# 4. só então deixar o cron assumir
+```
+
+Restore de um pacote:
+```bash
+tar xzf <timestamp>.tar.gz -C /tmp/restore
+pg_restore --dbname tenant_acme --verbose --disable-triggers /tmp/restore/<tabela>.tar
+```
+
 ## Comandos Úteis
 ```bash
 # bootstrap de secrets/vars no GitHub

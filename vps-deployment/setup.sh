@@ -33,6 +33,15 @@ ask() {
     printf -v "$var_name" '%s' "$input"
 }
 
+ask_optional() {
+    local var_name="$1" prompt="$2" default="${3:-}"
+    local display_default=""
+    [[ -n "$default" ]] && display_default=" ${DIM}[${default}]${RESET}"
+    echo -ne "  ${BOLD}${prompt}${RESET}${display_default}: "
+    read -r input
+    printf -v "$var_name" '%s' "${input:-$default}"
+}
+
 ask_secret_default() {
     local var_name="$1" prompt="$2" default="${3:-}"
     echo -ne "  ${BOLD}${prompt}${RESET} ${DIM}[ENTER para manter]${RESET}: "
@@ -357,7 +366,22 @@ fi
 
 step "Salvar manifest.env"
 ask_secret_suggest REDIS_PASSWORD "Senha Redis" "${REDIS_PASSWORD:-${REDIS_PASSWORD_STAGING:-}}"
-ask BACKUP_TABLES "Tabelas para backup seletivo no DO Spaces (vazio = banco inteiro, ex: users,orders)" "${BACKUP_TABLES:-}"
+
+# Backup: fluxo padrão (conexão única) x fluxo banco-por-tenant.
+# O scaffold assume conexão única (princípios #1/#2 do blueprint) — a multitenancy
+# banco-por-tenant é uma exceção opt-in, para projetos que a adotaram depois do fork.
+_mt_default=n
+[[ "${BACKUP_MULTITENANT:-false}" == "true" ]] && _mt_default=s
+BACKUP_MULTITENANT=false
+if [[ "${DB_ENGINE}" == "pgsql" ]] && ask_yn "Este projeto usa multitenancy com um banco Postgres por tenant?" "${_mt_default}"; then
+    BACKUP_MULTITENANT=true
+    info "Os bancos são descobertos pelo dono (role), não listados — landlord + cada tenant entram sozinhos."
+    ask BACKUP_DB_OWNERS "Donos (roles) dos bancos a incluir no backup, separados por vírgula" "${BACKUP_DB_OWNERS:-${DB_USER}}"
+    ask_optional BACKUP_HOT_TABLES "Tabelas 'quentes' do tier rápido a cada 30min (vazio = só o backup diário completo)" "${BACKUP_HOT_TABLES:-}"
+    BACKUP_TABLES=""
+else
+    ask_optional BACKUP_TABLES "Tabelas para backup seletivo no DO Spaces (vazio = banco inteiro, ex: users,orders)" "${BACKUP_TABLES:-}"
+fi
 {
     emit_manifest_var PROJECT_NAME "$PROJECT_NAME"
     emit_manifest_var DEPLOY_ENV "$DEPLOY_ENV"
@@ -390,6 +414,11 @@ ask BACKUP_TABLES "Tabelas para backup seletivo no DO Spaces (vazio = banco inte
     emit_manifest_var PGADMIN_DEFAULT_EMAIL "${PGADMIN_DEFAULT_EMAIL:-admin@${DOMAIN}}"
     emit_manifest_var PGADMIN_DEFAULT_PASSWORD "${PGADMIN_DEFAULT_PASSWORD:-}"
     emit_manifest_var BACKUP_TABLES "${BACKUP_TABLES:-}"
+    emit_manifest_var BACKUP_MULTITENANT "${BACKUP_MULTITENANT}"
+    if [[ "${BACKUP_MULTITENANT}" == "true" ]]; then
+        emit_manifest_var BACKUP_DB_OWNERS "${BACKUP_DB_OWNERS:-}"
+        emit_manifest_var BACKUP_HOT_TABLES "${BACKUP_HOT_TABLES:-}"
+    fi
     if [[ "${DB_MODE}" == "externo" ]]; then
         DB_SSH_KEY_PATH="${HOME}/.ssh/id_ed25519_${GITHUB_REPO}_db"
         emit_manifest_var DB_SSH_KEY_PATH "${DB_SSH_KEY_PATH}"
@@ -521,24 +550,49 @@ if ask_yn "Configurar backup automático no DO Spaces para ${DEPLOY_ENV}?"; then
             [[ -f "${DB_KEY_PATH}" ]] && _BACKUP_SSH="ssh -o StrictHostKeyChecking=accept-new -i ${DB_KEY_PATH} -o ServerAliveInterval=30" && _BACKUP_SCP="scp -o StrictHostKeyChecking=accept-new -i ${DB_KEY_PATH}"
         fi
         REMOTE_BACKUP_TMP="/tmp/vps-backup-$$"
+        _backup_sudo=""
+        [[ "${_backup_target_user}" != "root" ]] && _backup_sudo="sudo "
         ${_BACKUP_SSH} "${_backup_target_user}@${_backup_target_host}" "mkdir -p ${REMOTE_BACKUP_TMP}"
-        ${_BACKUP_SCP} \
-            "${SCRIPT_DIR}/automation/backup-db.sh" \
-            "${SCRIPT_DIR}/automation/install-backup-cron.sh" \
-            "${SCRIPT_DIR}/automation/run-backup-all.sh" \
-            "${SCRIPT_DIR}/provisioning/common.sh" \
-            "${MANIFEST_OUT}" \
-            "${_backup_target_user}@${_backup_target_host}:${REMOTE_BACKUP_TMP}/"
-        ${_BACKUP_SSH} "${_backup_target_user}@${_backup_target_host}" \
-            "chmod +x ${REMOTE_BACKUP_TMP}/backup-db.sh ${REMOTE_BACKUP_TMP}/install-backup-cron.sh ${REMOTE_BACKUP_TMP}/run-backup-all.sh && \
-             command -v aws >/dev/null 2>&1 || apt-get install -y awscli 2>/dev/null || true && \
-             CRON_USER=root bash ${REMOTE_BACKUP_TMP}/install-backup-cron.sh ${REMOTE_BACKUP_TMP}/$(basename "${MANIFEST_OUT}") && \
-             rm -rf ${REMOTE_BACKUP_TMP}"
-        ok "Backup cron instalado em ${_backup_target_host} — ambiente: ${DEPLOY_ENV}"
+
+        if [[ "${BACKUP_MULTITENANT}" == "true" ]]; then
+            # Fluxo banco-por-tenant: um .tar.gz por banco (landlord + cada tenant),
+            # cron do usuário OS do Postgres, no host onde o banco roda.
+            ${_BACKUP_SCP} -r \
+                "${SCRIPT_DIR}/db/." \
+                "${_backup_target_user}@${_backup_target_host}:${REMOTE_BACKUP_TMP}/"
+            ${_BACKUP_SCP} \
+                "${SCRIPT_DIR}/provisioning/common.sh" \
+                "${MANIFEST_OUT}" \
+                "${_backup_target_user}@${_backup_target_host}:${REMOTE_BACKUP_TMP}/"
+            ${_BACKUP_SSH} "${_backup_target_user}@${_backup_target_host}" \
+                "chmod +x ${REMOTE_BACKUP_TMP}/*.sh && \
+                 ${_backup_sudo}bash ${REMOTE_BACKUP_TMP}/install-tenant-backup-cron.sh ${REMOTE_BACKUP_TMP}/$(basename "${MANIFEST_OUT}") && \
+                 rm -rf ${REMOTE_BACKUP_TMP}"
+            ok "Backup por tenant instalado em ${_backup_target_host} — bancos descobertos pelos donos: ${BACKUP_DB_OWNERS}"
+            info "Antes de confiar no cron, valide 1 banco na mão (ver vps-deployment/README.md → Backup por tenant)."
+        else
+            ${_BACKUP_SCP} \
+                "${SCRIPT_DIR}/automation/backup-db.sh" \
+                "${SCRIPT_DIR}/automation/install-backup-cron.sh" \
+                "${SCRIPT_DIR}/automation/run-backup-all.sh" \
+                "${SCRIPT_DIR}/provisioning/common.sh" \
+                "${MANIFEST_OUT}" \
+                "${_backup_target_user}@${_backup_target_host}:${REMOTE_BACKUP_TMP}/"
+            ${_BACKUP_SSH} "${_backup_target_user}@${_backup_target_host}" \
+                "chmod +x ${REMOTE_BACKUP_TMP}/backup-db.sh ${REMOTE_BACKUP_TMP}/install-backup-cron.sh ${REMOTE_BACKUP_TMP}/run-backup-all.sh && \
+                 command -v aws >/dev/null 2>&1 || apt-get install -y awscli 2>/dev/null || true && \
+                 CRON_USER=root bash ${REMOTE_BACKUP_TMP}/install-backup-cron.sh ${REMOTE_BACKUP_TMP}/$(basename "${MANIFEST_OUT}") && \
+                 rm -rf ${REMOTE_BACKUP_TMP}"
+            ok "Backup cron instalado em ${_backup_target_host} — ambiente: ${DEPLOY_ENV}"
+        fi
     fi
 else
     info "Backup não configurado. Para instalar depois:"
-    info "  DEPLOY_ENV=${DEPLOY_ENV} ./automation/install-backup-cron.sh ${MANIFEST_OUT}"
+    if [[ "${BACKUP_MULTITENANT}" == "true" ]]; then
+        info "  ./db/install-tenant-backup-cron.sh ${MANIFEST_OUT}   (como root, no host do banco)"
+    else
+        info "  DEPLOY_ENV=${DEPLOY_ENV} ./automation/install-backup-cron.sh ${MANIFEST_OUT}"
+    fi
 fi
 
 echo ""

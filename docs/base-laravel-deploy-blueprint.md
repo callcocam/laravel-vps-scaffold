@@ -23,6 +23,15 @@ Entregar um repositório Laravel **pré-configurado para rodar** com:
 
 1. **Sem `spatie/laravel-multitenancy`** e sem nenhum conceito de tenant/landlord.
 2. **Uma única conexão de banco** (`DB_CONNECTION`), sem `landlord`/`tenant`.
+
+   > **Única exceção prevista aos princípios #1/#2 — backup.** Se o projeto bifurcado adotar
+   > multitenancy com **um banco Postgres por tenant**, o backup padrão (um `DB_NAME` só) passa a
+   > cobrir apenas o landlord e os dados de cada cliente deixam de ser salvos **sem nenhum erro**
+   > — foi o que aconteceu no `plannerate-v1`, descoberto meses depois com o bucket vazio. Para
+   > esse caso existe o fluxo opt-in `vps-deployment/db/` (`BACKUP_MULTITENANT=true` no manifest,
+   > o wizard pergunta): descobre os bancos pelo dono e faz um `.tar.gz` por banco. Ver
+   > `vps-deployment/README.md` → "Backup por tenant". **Não é o default**: sem multitenancy, o
+   > fluxo padrão (`automation/backup-db.sh`) continua correto.
 3. **Sem roteamento por subdomínio** (`HostRegexp`/`Route::domain`). Um domínio = uma app.
 4. **Sem baking de domínio no build** (o `WAYFINDER_LANDLORD_DOMAIN` existia só por causa do `Route::domain` do tenant). Se você adotar Wayfinder, as URLs ficam relativas e nada precisa ser embutido na imagem.
 5. **Sem `tenants:artisan`** nas migrações nem no workflow. Migração é `php artisan migrate --force`.
